@@ -35,6 +35,7 @@ env/
 *~
 
 # Environment variables
+.env
 
 # OS
 .DS_Store
