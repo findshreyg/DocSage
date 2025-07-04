@@ -1,4 +1,4 @@
-# Intelligent Document Processing
+# DocSage
 
 A FastAPI-based intelligent document processing system that allows users to upload documents, ask questions about them, and receive AI-powered responses using LLM technology.
 
