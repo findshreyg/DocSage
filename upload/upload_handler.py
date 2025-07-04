@@ -1,64 +1,64 @@
 import boto3
-import hashlib
-import os
-import json
 import logging
-from dotenv import load_dotenv
-from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key, Attr
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
-AWS_REGION = os.getenv("AWS_REGION")
-S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+S3_BUCKET_NAME = "your-s3-bucket-name"  # Replace with your actual S3 bucket name
+s3_client = boto3.client('s3')
+metadata_table = boto3.resource('dynamodb').Table('MetadataTable')  # Replace with your actual metadata table name
+CONVERSATIONS_TABLE = boto3.resource('dynamodb').Table('ConversationsTable')  # Replace with your actual conversations table name
 
-# AWS clients
-s3_client = boto3.client("s3", region_name=AWS_REGION)
-dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
-metadata_table = dynamodb.Table("IDPMetadata")
-CONVERSATIONS_TABLE = dynamodb.Table("IDPConversation")
+def delete_all_user_files_and_metadata(user_id: str):
+    # 1️⃣ List all metadata items for this user
+    response = metadata_table.scan(
+        FilterExpression=Key("user_id").eq(user_id)
+    )
+    for item in response.get("Items", []):
+        s3_key = item.get("s3_key")
+        file_hash = item.get("hash")
 
-def calculate_file_hash(content: bytes) -> str:
-    return hashlib.sha256(content).hexdigest()
+        if s3_key:
+            s3_client.delete_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+            logger.info("Deleted S3 object")
 
-def check_duplicate(user_id: str, file_hash: str):
-    try:
-        response = metadata_table.get_item(Key={"user_id": user_id, "hash": file_hash})
-        if "Item" in response:
-            logger.info(f"Duplicate found for user_id={user_id}, hash={file_hash}")
-            return response
-        logger.info(f"No duplicate found for user_id={user_id}, hash={file_hash}")
-        return None
-    except ClientError as e:
-        logger.exception("Failed to check duplicate: %s", e)
-        raise
+            converted_key = s3_key + ".converted.pdf"
+            s3_client.delete_object(Bucket=S3_BUCKET_NAME, Key=converted_key)
+            logger.info("Deleted converted PDF")
 
-def upload_to_s3(user_id: str, file_name: str, content: bytes) -> str:
-    s3_key = f"user/{user_id}/{file_name}"
-    try:
-        s3_client.put_object(Bucket=S3_BUCKET_NAME, Key=s3_key, Body=content)
-        logger.info("Uploaded file to S3: %s", s3_key)
-        return s3_key
-    except ClientError as e:
-        logger.exception("S3 upload failed: %s", e)
-        raise Exception(f"Failed to upload to S3: {e}")
+        if file_hash:
+            metadata_table.delete_item(
+                Key={"user_id": user_id, "hash": file_hash}
+            )
+            logger.info("Deleted metadata for file")
 
-def save_metadata(user_id: str, file_hash: str, file_name: str, s3_key: str, result: dict):
-    if not result or "metadata" not in result or "questions" not in result:
-        logger.error("Invalid result for metadata save: %s", result)
-        raise ValueError("Invalid result for metadata save.")
-    try:
-        metadata_table.put_item(Item={
-            "user_id": user_id,
-            "hash": file_hash,
-            "filename": file_name,
-            "s3_key": s3_key,
-            "metadata": json.dumps(result["metadata"]),
-            "questions": result["questions"]
-        })
-        logger.info("Metadata saved for %s", file_name)
-    except ClientError as e:
+            convo_response = CONVERSATIONS_TABLE.scan(
+                FilterExpression=Key("user_id").eq(user_id) & Attr("file_hash_timestamp").begins_with(file_hash)
+            )
+            for convo_item in convo_response.get("Items", []):
+                file_hash_ts = convo_item.get("file_hash_timestamp")
+                if file_hash_ts:
+                    CONVERSATIONS_TABLE.delete_item(
+                        Key={"user_id": user_id, "file_hash_timestamp": file_hash_ts}
+                    )
+                    logger.info("Deleted related conversation")
+                else:
+                    raise Exception(f"Missing file_hash_timestamp in conversation item: {convo_item}")
+
+    # 2️⃣ Delete any remaining conversations for this user (safety net)
+    leftover_convos = CONVERSATIONS_TABLE.scan(
+        FilterExpression=Key("user_id").eq(user_id)
+    )
+    for leftover in leftover_convos.get("Items", []):
+        file_hash_ts = leftover.get("file_hash_timestamp")
+        if file_hash_ts:
+            CONVERSATIONS_TABLE.delete_item(
+                Key={"user_id": user_id, "file_hash_timestamp": file_hash_ts}
+            )
+            logger.info("Deleted leftover conversation")
+        else:
+            raise Exception(f"Missing file_hash_timestamp in leftover conversation: {leftover}")
+
         logger.exception("Failed to save metadata: %s", e)
         raise
 
@@ -148,55 +148,3 @@ async def handle_upload(file, user):
         "result": result
     }
 
-def delete_all_user_files_and_metadata(user_id: str):
-    # 1️⃣ List all metadata items for this user
-    response = metadata_table.scan(
-        FilterExpression=Key("user_id").eq(user_id)
-    )
-    for item in response.get("Items", []):
-        s3_key = item.get("s3_key")
-        file_hash = item.get("hash")
-
-        if s3_key:
-            s3_client.delete_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-            logger.info("Deleted S3 object")
-
-            converted_key = s3_key + ".converted.pdf"
-            s3_client.delete_object(Bucket=S3_BUCKET_NAME, Key=converted_key)
-            logger.info("Deleted converted PDF")
-
-        if file_hash:
-            metadata_table.delete_item(
-                Key={"user_id": user_id, "hash": file_hash}
-            )
-            logger.info("Deleted metadata for file")
-
-            convo_response = CONVERSATIONS_TABLE.scan(
-                FilterExpression=Key("user_id").eq(user_id) & Attr("file_hash_timestamp").begins_with(file_hash)
-            )
-            for convo_item in convo_response.get("Items", []):
-                file_hash_ts = convo_item.get("file_hash_timestamp")
-                if file_hash_ts:
-                    CONVERSATIONS_TABLE.delete_item(
-                        Key={"user_id": user_id, "file_hash_timestamp": file_hash_ts}
-                    )
-                    logger.info("Deleted related conversation")
-                else:
-                    raise Exception(f"Missing file_hash_timestamp in conversation item: {convo_item}")
-
-    # 2️⃣ Delete any remaining conversations for this user (safety net)
-    leftover_convos = CONVERSATIONS_TABLE.scan(
-        FilterExpression=Key("user_id").eq(user_id)
-    )
-    for leftover in leftover_convos.get("Items", []):
-        file_hash_ts = leftover.get("file_hash_timestamp")
-        if file_hash_ts:
-            CONVERSATIONS_TABLE.delete_item(
-                Key={"user_id": user_id, "file_hash_timestamp": file_hash_ts}
-            )
-            logger.info("Deleted leftover conversation")
-        else:
-            raise Exception(f"Missing file_hash_timestamp in leftover conversation: {leftover}")
-
-    logger.info("✅ Completed atomic cleanup for user_id")
-    return True

@@ -7,8 +7,7 @@ from api.routes_ask import router as ask_router
 
 app = FastAPI()
 
-# ✅ Include all route groups with clear prefixes
-app.include_router(auth_router, prefix="/auth_service")
+app.include_router(auth_router, prefix="/auth")
 app.include_router(upload_router, prefix="/upload")
 app.include_router(download_router, prefix="/download")
 app.include_router(conversation_router, prefix="/conversation")
