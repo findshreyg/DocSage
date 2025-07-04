@@ -164,13 +164,6 @@ curl -X POST "http://localhost:8000/ask/" \
 - **Input Validation**: All inputs validated using Pydantic schemas
 - **Error Handling**: Comprehensive error handling and logging
 
-## 🧪 Testing
-
-To run tests (if available):
-```bash
-pytest
-```
-
 ## 📊 Monitoring
 
 The application includes:
