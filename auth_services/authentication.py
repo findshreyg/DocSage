@@ -140,7 +140,7 @@ def logout(access_token: str):
         raise HTTPException(status_code=400, detail="Access token required for logout.")
     try:
         client.global_sign_out(
-            access_token=access_token
+            AccessToken=access_token
         )
     except ClientError as e:
         error_code = e.response['Error']['Code']
