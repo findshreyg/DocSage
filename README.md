@@ -1,4 +1,4 @@
-# Intelligent Document Processing
+# DocSage
 
 A FastAPI-based intelligent document processing system that allows users to upload documents, ask questions about them, and receive AI-powered responses using LLM technology.
 
@@ -163,13 +163,6 @@ curl -X POST "http://localhost:8000/ask/" \
 - **Secure File Storage**: Files stored in AWS S3 with proper access controls
 - **Input Validation**: All inputs validated using Pydantic schemas
 - **Error Handling**: Comprehensive error handling and logging
-
-## 🧪 Testing
-
-To run tests (if available):
-```bash
-pytest
-```
 
 ## 📊 Monitoring
 
