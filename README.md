@@ -4,31 +4,39 @@ A FastAPI-based intelligent document processing system that allows users to uplo
 
 ## 🚀 Features
 
-- **User Authentication**: Secure user registration, login, and session management
-- **Document Upload**: Upload and securely store documents in cloud storage
-- **Document Processing**: AI-powered document analysis and question answering
-- **Conversation Management**: Track and manage conversations about specific documents
-- **File Management**: List, download, and delete uploaded files
-- **Secure API**: JWT-based authentication with protected endpoints
+- **User Authentication**: Secure user registration, login, and session management.
+- **Document Upload**: Upload and securely store documents in cloud storage.
+- **Document Processing**: AI-powered document analysis and question answering.
+- **Conversation Management**: Track and manage conversations about specific documents.
+- **File Management**: List, download, and delete uploaded files.
+- **Secure API**: JWT-based authentication with protected endpoints.
+- **Monitoring**: Health check endpoint for monitoring application status.
 
 ## 🏗️ Architecture
 
-The project follows a modular architecture with the following components:
+The project follows a microservices architecture with the following components:
 
 ```
-├── api/                    # API route handlers
-│   ├── routes_auth.py      # Authentication endpoints
-│   ├── routes_upload.py    # File upload endpoints
-│   ├── routes_download.py  # File download endpoints
-│   ├── routes_conversation.py # Conversation management
-│   └── routes_ask.py       # AI question answering
-├── auth_services/          # Authentication services
-├── models/                 # Pydantic schemas and data models
-├── services/               # Business logic services
-├── upload/                 # File upload handlers
-├── download/               # File download handlers
-├── conversation/           # Conversation management
-└── main.py                 # FastAPI application entry point
+├── auth_services/            # Authentication microservice
+│   ├── main.py               # FastAPI app for auth
+│   ├── authentication.py     # Auth logic
+│   ├── password_management.py
+│   ├── user_management.py
+│   └── Dockerfile
+├── conversation_services/    # Conversation management microservice
+│   ├── main.py
+│   ├── conversation_handler.py
+│   └── Dockerfile
+├── file_services/            # File upload/download microservice
+│   ├── main.py
+│   ├── file_handler.py
+│   └── Dockerfile
+├── llm_services/             # LLM processing microservice
+│   ├── main.py
+│   ├── mistral_llm.py
+│   └── Dockerfile
+├── docs/                     # API documentation
+└── README.md
 ```
 
 ## 🛠️ Tech Stack
@@ -36,6 +44,7 @@ The project follows a modular architecture with the following components:
 - **Framework**: FastAPI
 - **Authentication**: JWT tokens, AWS Cognito
 - **Cloud Storage**: AWS S3 (boto3)
+- **Database**: AWS DynamoDB for conversation and file metadata storage
 - **AI/LLM**: Mistral LLM for document processing
 - **Validation**: Pydantic
 - **HTTP Client**: httpx, requests
@@ -109,12 +118,14 @@ Once the server is running, you can access:
 ### Authentication (`/auth`)
 - `POST /auth/signup` - User registration
 - `POST /auth/login` - User login
-- `POST /auth/confirm` - Confirm user registration
-- `POST /auth/resend` - Resend confirmation code
-- `POST /auth/refresh` - Refresh JWT token
+- `POST /auth/confirm-signup` - Confirm user registration
+- `POST /auth/resend-confirmation-code` - Resend confirmation code
+- `POST /auth/refresh-token` - Refresh JWT token
 - `POST /auth/forgot-password` - Initiate password reset
 - `POST /auth/confirm-forgot-password` - Confirm password reset
 - `POST /auth/change-password` - Change user password
+- `GET /auth/get-user` - Get user details
+- `DELETE /auth/delete-user` - Delete user account
 
 ### File Upload (`/upload`)
 - `POST /upload/` - Upload a document
@@ -163,6 +174,7 @@ curl -X POST "http://localhost:8000/ask/" \
 - **Secure File Storage**: Files stored in AWS S3 with proper access controls
 - **Input Validation**: All inputs validated using Pydantic schemas
 - **Error Handling**: Comprehensive error handling and logging
+- **Monitoring**: Health check endpoint for monitoring application status
 
 ## 📊 Monitoring
 
@@ -188,6 +200,12 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 For support, please contact the development team or create an issue in the repository.
 
 ## 🔄 Changelog
+
+### Version 1.1.0
+- Refactored to microservices architecture
+- Separated services: auth, file, conversation, LLM
+- Dockerized each service
+- Updated API documentation
 
 ### Version 1.0.0
 - Initial release

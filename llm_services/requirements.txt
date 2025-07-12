@@ -1,10 +1,8 @@
 fastapi
-uvicorn
 httpx
 python-dotenv
-pydantic
 boto3
-botocore
-requests
-python-jose
+scikit-learn
+uvicorn
+mistralai
 python-multipart

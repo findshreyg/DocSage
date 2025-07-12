@@ -1,12 +1,7 @@
 import os
-import httpx
-from fastapi import HTTPException
 from dotenv import load_dotenv
-from models.schemas import AskRequest, AskResponse
+from schemas import AskRequest, AskResponse
 import logging
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -37,8 +32,27 @@ Now answer this question:
 
 async def process_question(payload: AskRequest, user: dict) -> AskResponse:
     """
-    Process a question by calling Mistral LLM with a secure S3 document URL.
-    Uses the authenticated user's ID from the access token.
+    Process a user question by securely calling the Mistral LLM.
+
+    This function performs the following:
+    - Uses the authenticated user's ID to locate their file record in DynamoDB.
+    - Handles format conversion if the uploaded file is not already a PDF.
+    - Generates a secure S3 presigned URL for the LLM to access the file.
+    - Checks for duplicate or similar questions using cosine similarity.
+    - Calls the Mistral LLM with a structured prompt including the document.
+    - Parses, validates, and saves the LLM's response to the conversation table.
+    - Returns a validated structured answer.
+
+    Args:
+        payload (AskRequest): The input containing the file hash and question.
+        user (dict): Authenticated user info, containing Cognito ID.
+
+    Returns:
+        AskResponse: The structured response containing the answer, confidence, source, and verification flag.
+
+    Raises:
+        HTTPException: For DynamoDB lookups, S3 issues, conversion failures,
+                       LLM errors, JSON parse failures, or validation issues.
     """
     import boto3
     import os
@@ -46,24 +60,24 @@ async def process_question(payload: AskRequest, user: dict) -> AskResponse:
     import json
     import re
     from fastapi import HTTPException
-    from boto3.dynamodb.conditions import Key, Attr
+    from boto3.dynamodb.conditions import Key
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.metrics.pairwise import cosine_similarity
     import datetime
     from decimal import Decimal
 
     try:
-        dynamodb = boto3.resource("dynamodb")
+        AWS_REGION = os.getenv("AWS_REGION")
+        dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
         METADATA_TABLE_NAME = os.getenv("DDB_TABLE")
         S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
-        AWS_REGION = os.getenv("AWS_REGION")
 
-        user_id = user["sub"]
+        # Use user information directly, don't call internal get-user endpoint
+        user_id = user["sub"] if "sub" in user else user["Username"]
 
         table = dynamodb.Table(METADATA_TABLE_NAME)
         file_record = table.get_item(Key={"user_id": user_id, "hash": payload.file_hash})
         if "Item" not in file_record:
-            logger.warning(f"File not found for user")
             raise HTTPException(status_code=404, detail="File not found for user.")
         s3_key = file_record["Item"]["s3_key"]
         s3_client = boto3.client("s3", region_name=AWS_REGION)
@@ -88,7 +102,6 @@ async def process_question(payload: AskRequest, user: dict) -> AskResponse:
 
         content_type = file_record["Item"].get("content_type")
         if not content_type:
-            logger.warning(f"Missing content_type for s3_key={s3_key}. Inferring from extension.")
             ext = s3_key.lower().split(".")[-1]
             if ext in ["ppt", "pptx", "odp"]:
                 content_type = "application/vnd.ms-powerpoint"
@@ -107,12 +120,10 @@ async def process_question(payload: AskRequest, user: dict) -> AskResponse:
 
             try:
                 s3_client.head_object(Bucket=S3_BUCKET_NAME, Key=converted_key)
-                logger.info(f"Reusing existing converted PDF")
                 s3_key_to_use = converted_key
 
             except s3_client.exceptions.ClientError as e:
                 if e.response["Error"]["Code"] == "404":
-                    logger.info(f"No converted PDF found — converting to PDF now")
 
                     with tempfile.TemporaryDirectory() as tmpdir:
                         local_path = os.path.join(tmpdir, os.path.basename(s3_key))
@@ -148,7 +159,6 @@ async def process_question(payload: AskRequest, user: dict) -> AskResponse:
 
             if max_sim_val > 0.85:
                 similar_item = past_items["Items"][max_sim_idx]
-                logger.info(f"Returning similar previous answer")
                 return AskResponse(
                     question=similar_item["question"],
                     answer=similar_item["answer"],
@@ -187,37 +197,28 @@ async def process_question(payload: AskRequest, user: dict) -> AskResponse:
             resp = await client.post(MISTRAL_API_URL, headers=headers, json=data)
 
             if resp.status_code != 200:
-                logger.error(f"LLM API error: {resp.status_code} - {resp.text}")
                 raise HTTPException(status_code=resp.status_code, detail=resp.text)
 
             result_text = resp.json()["choices"][0]["message"]["content"]
 
             match = re.search(r'```json\s*(\{.*?\})\s*```', result_text, re.DOTALL)
             if not match:
-                logger.error("No valid JSON block found in LLM response.")
                 raise HTTPException(status_code=500, detail="No valid JSON block found.")
 
             parsed = json.loads(match.group(1).strip())
 
             # Type checks for parsed fields
             if not isinstance(parsed.get("question"), str):
-                logger.error("Invalid LLM response: missing or invalid 'question'")
                 raise HTTPException(status_code=500, detail="Invalid LLM response: missing 'question'")
             if not isinstance(parsed.get("answer"), str):
-                logger.error("Invalid LLM response: missing or invalid 'answer'")
                 raise HTTPException(status_code=500, detail="Invalid LLM response: missing 'answer'")
             if not isinstance(parsed.get("confidence"), (float, int)):
-                logger.error("Invalid LLM response: missing or invalid 'confidence'")
                 raise HTTPException(status_code=500, detail="Invalid LLM response: missing 'confidence'")
             if not isinstance(parsed.get("reasoning"), str):
-                logger.error("Invalid LLM response: missing or invalid 'reasoning'")
                 raise HTTPException(status_code=500, detail="Invalid LLM response: missing 'reasoning'")
-            # source can be None or dict
             if "source" not in parsed:
-                logger.error("Invalid LLM response: missing 'source'")
                 raise HTTPException(status_code=500, detail="Invalid LLM response: missing 'source'")
             if not isinstance(parsed.get("verified"), bool):
-                logger.error("Invalid LLM response: missing or invalid 'verified'")
                 raise HTTPException(status_code=500, detail="Invalid LLM response: missing 'verified'")
 
             timestamp = datetime.datetime.now().isoformat()
@@ -234,84 +235,7 @@ async def process_question(payload: AskRequest, user: dict) -> AskResponse:
                 "verified": parsed["verified"]
             })
 
-            logger.info(f"Question processed successfully")
             # Return as validated Pydantic model
             return AskResponse(**parsed)
     except Exception as e:
-        logger.exception("Unexpected error in process_question")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-async def extract_metadata(file_bytes: bytes, file_name: str):
-    """
-    Calls Mistral LLM to extract metadata + common questions from a document.
-    """
-    try:
-        headers = {
-            "Authorization": f"Bearer {MISTRAL_API_KEY}",
-            "Content-Type": "application/json"
-        }
-
-        prompt = f"""
-        You are an intelligent assistant. Analyze the uploaded document '{file_name}'.
-        Extract the key metadata (title, type, number of pages, created date) and return
-        5 likely questions a user might ask about this document. Respond in JSON:
-        {{
-          "metadata": {{
-            "title": string,
-            "type": string,
-            "pages": int,
-            "created_date": string
-          }},
-          "questions": [string, ...]
-        }}
-        """
-
-        data = {
-            "model": MISTRAL_LLM_MODEL,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt}
-                    ]
-                }
-            ]
-        }
-
-        async with httpx.AsyncClient(timeout=180) as client:
-            resp = await client.post(MISTRAL_API_URL, headers=headers, json=data)
-
-            if resp.status_code != 200:
-                logger.error(f"LLM API error (metadata): {resp.status_code} - {resp.text}")
-                raise HTTPException(status_code=resp.status_code, detail=resp.text)
-
-            import re
-            import json
-
-            result_text = resp.json()["choices"][0]["message"]["content"]
-
-            match = re.search(r'```json\s*(\{.*?\})\s*```', result_text, re.DOTALL)
-            if match:
-                logger.info(f"Metadata extracted successfully for file_name={file_name}")
-                return json.loads(match.group(1).strip())
-            else:
-                logger.error("No valid JSON block found in LLM metadata response.")
-                raise HTTPException(status_code=500, detail="No valid JSON block found in LLM metadata response.")
-    except Exception as e:
-        logger.exception("Error in extract_metadata")
-        raise HTTPException(status_code=500, detail=str(e))
-
-async def get_conversations(user_id: str, file_hash: str):
-    import boto3
-    from boto3.dynamodb.conditions import Key
-
-    dynamodb = boto3.resource("dynamodb")
-    table = dynamodb.Table("IDPConversation")
-
-    response = table.query(
-        KeyConditionExpression=Key("user_id").eq(user_id) & Key("file_hash_timestamp").begins_with(file_hash)
-    )
-
-    items = response.get("Items", [])
-    return items
