@@ -1,42 +1,97 @@
 # DocSage
 
-A FastAPI-based intelligent document processing system that allows users to upload documents, ask questions about them, and receive AI-powered responses using LLM technology.
+A FastAPI-based intelligent document processing system that allows users to upload documents, ask questions about them, and receive AI-powered responses using LLM technology. Built with a modern microservices architecture for scalability, maintainability, and independent deployment.
 
 ## 🚀 Features
 
-- **User Authentication**: Secure user registration, login, and session management.
-- **Document Upload**: Upload and securely store documents in cloud storage.
-- **Document Processing**: AI-powered document analysis and question answering.
-- **Conversation Management**: Track and manage conversations about specific documents.
-- **File Management**: List, download, and delete uploaded files.
-- **Secure API**: JWT-based authentication with protected endpoints.
-- **Monitoring**: Health check endpoint for monitoring application status.
+- **🔐 User Authentication**: Complete user lifecycle management with AWS Cognito integration
+  - Secure registration and email confirmation
+  - JWT-based authentication and authorization
+  - Password management (reset, change, forgot password)
+  - User profile management and account deletion
+- **📄 Document Upload & Management**: Secure file handling with cloud storage
+  - Multi-format support (PDF, DOCX, PPT, etc.)
+  - AWS S3 integration for secure storage
+  - File metadata tracking and organization
+  - Presigned URLs for secure downloads
+- **🤖 AI-Powered Document Processing**: Advanced LLM integration
+  - Mistral AI for intelligent document analysis
+  - Context-aware question answering
+  - Confidence scoring and reasoning explanation
+  - Source verification and citations
+- **💬 Conversation Management**: Complete conversation lifecycle
+  - Track conversations per document and user
+  - Conversation history and retrieval
+  - Bulk conversation management
+- **🏗️ Microservices Architecture**: Independent, scalable services
+  - Service isolation and independent deployment
+  - Docker containerization for all services
+  - Health monitoring for each service
+- **🔒 Enterprise Security**: Comprehensive security measures
+  - Bearer token authentication across all services
+  - User-specific data isolation
+  - Secure file access controls
+  - Input validation and sanitization
+- **📊 Testing & Quality Assurance**: Comprehensive test coverage
+  - Unit tests for all authentication services
+  - Integration testing capabilities
+  - Mocked external dependencies
 
 ## 🏗️ Architecture
 
-The project follows a microservices architecture with the following components:
+The project follows a **microservices architecture** with independent services that can be deployed, scaled, and maintained separately:
 
 ```
-├── auth_services/            # Authentication microservice
-│   ├── main.py               # FastAPI app for auth
-│   ├── authentication.py     # Auth logic
-│   ├── password_management.py
-│   ├── user_management.py
-│   └── Dockerfile
-├── conversation_services/    # Conversation management microservice
-│   ├── main.py
-│   ├── conversation_handler.py
-│   └── Dockerfile
-├── file_services/            # File upload/download microservice
-│   ├── main.py
-│   ├── file_handler.py
-│   └── Dockerfile
-├── llm_services/             # LLM processing microservice
-│   ├── main.py
-│   ├── mistral_llm.py
-│   └── Dockerfile
-├── docs/                     # API documentation
-└── README.md
+├── 🔐 auth_services/             # Authentication & User Management Service (Port 8000)
+│   ├── main.py                   # FastAPI application
+│   ├── authentication.py         # Login, logout, token management
+│   ├── password_management.py     # Password operations
+│   ├── user_management.py        # User lifecycle management
+│   ├── utils.py                  # Helper functions
+│   ├── schemas.py               # Pydantic models
+│   ├── requirements.txt         # Service dependencies
+│   ├── Dockerfile              # Container configuration
+│   └── .dockerignore           # Docker build optimization
+├── 💬 conversation_services/     # Conversation Management Service (Port 8001)
+│   ├── main.py                  # FastAPI application
+│   ├── conversation_handler.py  # Conversation CRUD operations
+│   ├── utils.py                 # Authentication utilities
+│   ├── schemas.py              # Request/response models
+│   ├── requirements.txt        # Service dependencies
+│   ├── Dockerfile             # Container configuration
+│   └── .dockerignore          # Docker build optimization
+├── 📁 file_services/            # File Management Service (Port 8002)
+│   ├── main.py                 # FastAPI application
+│   ├── file_handler.py         # File operations (upload, download, delete)
+│   ├── utils.py                # Authentication utilities
+│   ├── schemas.py             # Request/response models
+│   ├── requirements.txt       # Service dependencies
+│   ├── Dockerfile            # Container configuration
+│   └── .dockerignore         # Docker build optimization
+├── 🤖 llm_services/             # LLM Processing Service (Port 8003)
+│   ├── main.py                 # FastAPI application
+│   ├── mistral_llm.py          # Mistral AI integration
+│   ├── utils.py                # Authentication utilities
+│   ├── schemas.py             # Request/response models
+│   ├── requirements.txt       # Service dependencies
+│   ├── Dockerfile            # Container configuration
+│   └── .dockerignore         # Docker build optimization
+├── 🧪 tests/                   # Comprehensive Test Suite
+│   ├── __init__.py
+│   └── auth_services/          # Authentication service tests
+│       ├── __init__.py
+│       ├── test_main.py        # API endpoint tests
+│       ├── test_authentication.py  # Auth logic tests
+│       ├── test_password_management.py  # Password tests
+│       ├── test_user_management.py  # User management tests
+│       └── test_utils.py       # Utility function tests
+├── 📚 docs/                    # Comprehensive API Documentation
+│   ├── Auth API Document.md    # Authentication service docs
+│   ├── File Service API Documentation.md  # File service docs
+│   ├── LLM Service API Document.md  # LLM service docs
+│   └── Convo API Documentation.md  # Conversation service docs
+├── main.py                     # Main application orchestrator
+└── README.md                   # This file
 ```
 
 ## 🛠️ Tech Stack
@@ -97,21 +152,69 @@ The project follows a microservices architecture with the following components:
    JWT_ALGORITHM=HS256
    ```
 
-## 🚀 Usage
+## 🚀 Deployment & Usage
 
-### Starting the Server
+### Option 1: Microservices Deployment (Recommended)
+
+Each service can be deployed independently using Docker:
+
+#### Authentication Service (Port 8000)
+```bash
+cd auth_services
+docker build -t auth-service .
+docker run -p 8000:8000 --env-file ../.env auth-service
+```
+
+#### Conversation Service (Port 8001)
+```bash
+cd conversation_services
+docker build -t conversation-service .
+docker run -p 8001:8001 --env-file ../.env conversation-service
+```
+
+#### File Service (Port 8002)
+```bash
+cd file_services
+docker build -t file-service .
+docker run -p 8002:8002 --env-file ../.env file-service
+```
+
+#### LLM Service (Port 8003)
+```bash
+cd llm_services
+docker build -t llm-service .
+docker run -p 8003:8003 --env-file ../.env llm-service
+```
+
+### Option 2: Development Mode (Main Orchestrator)
 
 ```bash
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The API will be available at `http://localhost:8000`
+### Service Health Checks
+
+Each service has its own health check endpoint:
+- **Auth Service**: `http://localhost:8000/auth/health`
+- **Conversation Service**: `http://localhost:8001/conversation/health`
+- **File Service**: `http://localhost:8002/file/health`
+- **LLM Service**: `http://localhost:8003/llm/health`
 
 ### API Documentation
 
-Once the server is running, you can access:
-- **Interactive API docs**: `http://localhost:8000/docs`
-- **ReDoc documentation**: `http://localhost:8000/redoc`
+Each service provides its own interactive documentation:
+- **Auth Service**: `http://localhost:8000/docs`
+- **Conversation Service**: `http://localhost:8001/docs`
+- **File Service**: `http://localhost:8002/docs`
+- **LLM Service**: `http://localhost:8003/docs`
+
+### Service Dependencies
+
+Each service has its own `requirements.txt` with optimized dependencies:
+- **Auth Service**: FastAPI, boto3, pydantic, uvicorn
+- **Conversation Service**: FastAPI, boto3, pydantic, uvicorn
+- **File Service**: FastAPI, boto3, python-multipart, uvicorn
+- **LLM Service**: FastAPI, mistralai, scikit-learn, uvicorn
 
 ## 🔗 API Endpoints
 
@@ -176,12 +279,48 @@ curl -X POST "http://localhost:8000/ask/" \
 - **Error Handling**: Comprehensive error handling and logging
 - **Monitoring**: Health check endpoint for monitoring application status
 
+## 🧪 Testing
+
+The project includes a comprehensive test suite focusing on the authentication service:
+
+### Running Tests
+
+```bash
+# Install test dependencies
+pip install pytest pytest-asyncio httpx
+
+# Run all tests
+pytest tests/
+
+# Run specific test file
+pytest tests/auth_services/test_main.py
+
+# Run with coverage
+pytest --cov=auth_services tests/auth_services/
+```
+
+### Test Structure
+
+- **`tests/auth_services/test_main.py`**: API endpoint testing
+- **`tests/auth_services/test_authentication.py`**: Authentication logic tests
+- **`tests/auth_services/test_password_management.py`**: Password management tests
+- **`tests/auth_services/test_user_management.py`**: User management tests
+- **`tests/auth_services/test_utils.py`**: Utility function tests
+
+### Test Features
+
+- **Mocked External Dependencies**: AWS Cognito calls are mocked for isolated testing
+- **FastAPI TestClient**: Comprehensive API endpoint testing
+- **Dependency Override**: Authentication dependencies can be overridden for testing
+- **Error Scenario Testing**: Tests cover both success and failure scenarios
+
 ## 📊 Monitoring
 
 The application includes:
-- Health check endpoint for monitoring
-- Comprehensive error handling
-- Structured logging
+- **Service Health Checks**: Individual health endpoints for each microservice
+- **Comprehensive Error Handling**: Structured error responses with proper HTTP status codes
+- **Structured Logging**: Detailed logging for debugging and monitoring
+- **Service Isolation**: Independent service monitoring and alerting capabilities
 
 ## 🤝 Contributing
 
