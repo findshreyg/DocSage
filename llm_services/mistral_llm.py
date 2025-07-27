@@ -1,241 +1,317 @@
 import os
-from dotenv import load_dotenv
-from schemas import AskRequest, AskResponse
 import logging
+import json
+from typing import Any, Dict, List
+import boto3
+from decimal import Decimal
+from dotenv import load_dotenv
+from fastapi import HTTPException
+from boto3.dynamodb.conditions import Key, Attr
+import datetime
+import httpx
+import re
+
+from schemas import AskRequest, AskResponse
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 MISTRAL_LLM_MODEL = os.getenv("MISTRAL_LLM_MODEL")
-MISTRAL_API_URL =os.getenv("MISTRAL_API_URL")
+MISTRAL_API_URL = os.getenv("MISTRAL_API_URL")
+AWS_REGION = os.getenv("AWS_REGION")
+METADATA_TABLE_NAME = os.getenv("DDB_TABLE")
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+CONVERSATION_TABLE = os.getenv("DYNAMODB_CONVERSATION_TABLE", "IDPConversation")
+
+REQUIRED_VARS = [
+    MISTRAL_API_KEY, MISTRAL_LLM_MODEL, MISTRAL_API_URL, AWS_REGION,
+    METADATA_TABLE_NAME, S3_BUCKET_NAME
+]
+if not all(REQUIRED_VARS):
+    raise RuntimeError("One or more environment variables required for LLM are missing.")
 
 PROMPT_TEMPLATE = """
-You are an intelligent assistant helping users answer questions strictly based on the content of the attached insurance certificate document.
+You are an advanced document intelligence assistant specialized in extracting accurate, reliable information from uploaded documents, including insurance certificates, financial statements, contracts, legal documents, forms, and other structured or semi-structured materials.
 
-Your task:
-1. Carefully review all visible sections, including tables, headers, checkboxes, and form fields.
-2. If the question refers to a specific field (e.g., limit, date, name), and the field is present but the value is blank or illegible, acknowledge that the field exists but is not filled in.
-3. If the answer is present, extract it exactly as shown in the document.
-4. Format your response as a JSON object with the following structure:
-{{
-  "question": (string),
-  "answer": (string),
-  "confidence": (number between 0.0 and 1.0),
-  "reasoning": (string),
-  "source": (object or null),
-  "verified": (boolean)
-}}
+## Core Analysis Framework
 
-Now answer this question:
-{question}
+### 1. Document Assessment & Preprocessing
+- Assess document quality, readability, and structure.
+- Identify document type, layout, and organization.
+- Note accessibility issues (scan quality, rotated text, watermarks, redactions).
+- Catalog headers, footers, tables, forms, signatures, stamps, and annotations.
+
+### 2. Comprehensive Content Analysis
+- Systematically review all visible content:
+  - Body text, tables, charts, form fields.
+  - Headers, subheaders, dividers.
+  - Checkboxes, radio buttons, selection indicators.
+  - Signatures, stamps.
+  - Footnotes, fine print, metadata, document properties.
+  - Cross-references and related document mentions.
+
+### 3. Multi-Document Coordination
+- If there are multiple documents, establish relationships and cross-references.
+- Prioritize primary documents.
+- Flag contradictions or inconsistencies across documents.
+
+### 4. Question Processing & Response Strategy
+
+**For Explicit Information:**
+- Extract exactly as written, preserving formatting.
+- In the "source" section:
+  - Add a "search_anchor"—an exact phrase or distinctive wording (6–20 words) from the document that can be found by Ctrl+F.
+  - Also, include the "page_number" field, which is the page number(s) (**int, list of int, or null**) where the search_anchor is found in the document.
+  - If the search_anchor cannot be reliably mapped to a page, set "page_number" to null.
+
+**For Blank/Missing Fields:**
+- Clearly state if a field is unfilled, illegible, or redacted.
+- Distinguish between "field not present" and "field present but empty".
+
+**For Inferred Information:**
+- Use logical deduction only when confident and contextually appropriate.
+- Clearly mark inferred versus explicitly stated information.
+- Provide reasoning for inferences.
+
+**For Ambiguous Questions:**
+- Request clarification for questions with multiple possible interpretations.
+- Provide alternative interpretations and respective answers.
+
+### 5. Data Validation & Quality Assurance
+- Validate data against expected formats.
+- Check for internal consistency.
+- Flag potential data quality issues.
+
+### 6. Confidence Assessment Criteria
+- 0.9–1.0: Explicit, unambiguous information.
+- 0.7–0.8: Clearly present with minor interpretation.
+- 0.5–0.6: Inferred from context with reasonable confidence.
+- 0.3–0.4: Uncertain or partial information.
+- 0.0–0.2: No relevant information or highly uncertain.
+
+### 7. Error Handling & Edge Cases
+- Handle corrupted, low-quality documents gracefully.
+- Provide meaningful responses for password-protected/inaccessible content.
+- Address multi-language or mixed-content documents.
+- Manage large, complex documents.
+
+### 8. Security & Privacy Considerations
+- Handle sensitive info (e.g., SSNs, account numbers) appropriately.
+- Note when information is confidential or restricted.
+- Maintain discretion with private data.
+
+## Response Requirements
+
+Return your result as a well-formatted JSON object with these fields:
+
+{
+  "question": "(string) - The original question as provided",
+  "answer": "(string) - The extracted or inferred answer, or clear statement if not found",
+  "confidence": "(number 0.0-1.0) - Confidence level (per above criteria)",
+  "reasoning": "(string) - Detailed explanation (how info was found/inferred, or why not found)",
+  "total_pages": "(int or null) - The total number of pages in the analyzed document. If not determinable, use null.",
+  "source": {
+    "location": "(string or null) - e.g., 'Page 2, Table 1, Row 3' or 'Section 4.2'",
+    "search_anchor": "(string or null) - Exact phrase or wording found in the document (6–20 words), as it appears in the document for Ctrl+F discovery",
+    "page_number": "(int, array of int, or null) - The page(s) of the document where search_anchor appears. If not determinable, use null.",
+    "context": "(string or null) - Surrounding text or section context",
+    "extraction_method": "(string or null) - 'explicit', 'inferred', 'cross-referenced', or 'not_found'"
+  },
+  "verified": "(boolean) - True if the answer was cross-verified",
+  "data_quality_notes": "(string or null) - Notes on data quality, legibility, or completeness",
+  "alternative_interpretations": "(array or null) - Other possible answers if the question was ambiguous"
+}
+
+- Always include the "total_pages" field at the top level of the response. If you cannot determine the total, set it to null.
+- Always include a search_anchor and its respective page_number(s) when possible.
+
+## Quality Standards
+- Prioritize accuracy over speed.
+- When uncertain, acknowledge limitations rather than guess.
+- Provide actionable information even when the primary answer isn't available.
+- Use consistent terminology and formatting.
+- Be explicit about assumptions or interpretations.
+
+Now analyze the provided document(s) and answer this question: {question}
 """
+
+def safe_format_prompt(template: str, question: str) -> str:
+    """
+    Safe prompt string formatting in case question contains curly braces.
+    """
+    return template.replace("{question}", question.replace("{", "{{").replace("}", "}}"))
+
+def extract_json_from_llm_response(text: str) -> Dict[str, Any]:
+    """
+    Extracts the JSON block from the LLM response.
+    Returns a parsed dict.
+    Raises HTTPException if block not found or not valid.
+    """
+    # Look for the first JSON object in the response
+    json_block_pattern = re.compile(r"\{[\s\S]*\}")
+    match = json_block_pattern.search(text)
+    if not match:
+        raise HTTPException(status_code=500, detail="No valid JSON block found in LLM response.")
+    try:
+        return json.loads(match.group(0))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to parse JSON from LLM response.")
 
 async def process_question(payload: AskRequest, user: dict) -> AskResponse:
     """
-    Process a user question by securely calling the Mistral LLM.
-
-    This function performs the following:
-    - Uses the authenticated user's ID to locate their file record in DynamoDB.
-    - Handles format conversion if the uploaded file is not already a PDF.
-    - Generates a secure S3 presigned URL for the LLM to access the file.
-    - Checks for duplicate or similar questions using cosine similarity.
-    - Calls the Mistral LLM with a structured prompt including the document.
-    - Parses, validates, and saves the LLM's response to the conversation table.
-    - Returns a validated structured answer.
-
-    Args:
-        payload (AskRequest): The input containing the file hash and question.
-        user (dict): Authenticated user info, containing Cognito ID.
-
-    Returns:
-        AskResponse: The structured response containing the answer, confidence, source, and verification flag.
-
-    Raises:
-        HTTPException: For DynamoDB lookups, S3 issues, conversion failures,
-                       LLM errors, JSON parse failures, or validation issues.
+    Process a user question by orchestrating S3, DynamoDB, similarity search, and LLM call.
     """
-    import boto3
-    import os
-    import httpx
-    import json
-    import re
-    from fastapi import HTTPException
-    from boto3.dynamodb.conditions import Key
-    from sklearn.feature_extraction.text import TfidfVectorizer
-    from sklearn.metrics.pairwise import cosine_similarity
-    import datetime
-    from decimal import Decimal
-
     try:
-        AWS_REGION = os.getenv("AWS_REGION")
+        # Retrieve metadata and verify S3 presence
         dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
-        METADATA_TABLE_NAME = os.getenv("DDB_TABLE")
-        S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
-
-        # Use user information directly, don't call internal get-user endpoint
-        user_id = user["sub"] if "sub" in user else user["Username"]
-
         table = dynamodb.Table(METADATA_TABLE_NAME)
+        user_id = user.get("sub") or user.get("Username")
+        if not user_id:
+            raise HTTPException(status_code=400, detail="User identifier not found in Cognito attributes")
+
         file_record = table.get_item(Key={"user_id": user_id, "hash": payload.file_hash})
         if "Item" not in file_record:
             raise HTTPException(status_code=404, detail="File not found for user.")
-        s3_key = file_record["Item"]["s3_key"]
+
+        s3_key = file_record["Item"].get("s3_key")
+        if not s3_key:
+            raise HTTPException(status_code=500, detail="S3 key not found in file metadata.")
+
         s3_client = boto3.client("s3", region_name=AWS_REGION)
 
-        import tempfile
-        import subprocess
-
-        def download_from_s3(bucket, key, local_path):
-            s3_client.download_file(bucket, key, local_path)
-
-        def upload_to_s3(bucket, key, local_path):
-            s3_client.upload_file(local_path, bucket, key)
-
-        def convert_to_pdf(input_path: str) -> str:
-            output_path = input_path.rsplit(".", 1)[0] + ".pdf"
-            subprocess.run([
-                "libreoffice", "--headless", "--convert-to", "pdf",
-                "--outdir", os.path.dirname(input_path),
-                input_path
-            ], check=True)
-            return output_path
-
-        content_type = file_record["Item"].get("content_type")
-        if not content_type:
-            ext = s3_key.lower().split(".")[-1]
-            if ext in ["ppt", "pptx", "odp"]:
-                content_type = "application/vnd.ms-powerpoint"
-            elif ext in ["xls", "xlsx", "ods"]:
-                content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            else:
-                content_type = "application/pdf"
-        needs_conversion = content_type in [
-            "application/vnd.ms-powerpoint",
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        ]
-
-        if needs_conversion:
+        # Use converted PDF if available
+        if not s3_key.lower().endswith(".pdf"):
             converted_key = s3_key + ".converted.pdf"
-
             try:
                 s3_client.head_object(Bucket=S3_BUCKET_NAME, Key=converted_key)
-                s3_key_to_use = converted_key
-
-            except s3_client.exceptions.ClientError as e:
-                if e.response["Error"]["Code"] == "404":
-
-                    with tempfile.TemporaryDirectory() as tmpdir:
-                        local_path = os.path.join(tmpdir, os.path.basename(s3_key))
-                        download_from_s3(S3_BUCKET_NAME, s3_key, local_path)
-                        converted_path = convert_to_pdf(local_path)
-                        upload_to_s3(S3_BUCKET_NAME, converted_key, converted_path)
-
-                    s3_key_to_use = converted_key
-                else:
-                    raise
-        else:
-            s3_key_to_use = s3_key
+                s3_key = converted_key
+            except Exception:
+                pass  # If not, stick with the original
 
         s3_url = s3_client.generate_presigned_url(
-            ClientMethod='get_object',
-            Params={'Bucket': S3_BUCKET_NAME, 'Key': s3_key_to_use},
-            ExpiresIn=3600
+            'get_object', Params={'Bucket': S3_BUCKET_NAME, 'Key': s3_key}, ExpiresIn=3600
         )
 
-        conversation_table = dynamodb.Table("IDPConversation")
-
-        past_items = conversation_table.query(
+        # Similarity search for previous questions
+        conversation_table = dynamodb.Table(CONVERSATION_TABLE)
+        prev_items = conversation_table.query(
             KeyConditionExpression=Key("user_id").eq(user_id) & Key("file_hash_timestamp").begins_with(payload.file_hash)
         )
-
-        previous_questions = [item["question"] for item in past_items.get("Items", [])]
+        previous_questions = [item.get("question", "") for item in prev_items.get("Items", [])]
         if previous_questions:
-            vectorizer = TfidfVectorizer().fit(previous_questions + [payload.question])
-            vectors = vectorizer.transform(previous_questions + [payload.question])
+            all_questions = previous_questions + [payload.question]
+            vectorizer = TfidfVectorizer().fit(all_questions)
+            vectors = vectorizer.transform(all_questions)
             sims = cosine_similarity(vectors[-1], vectors[:-1])
-            max_sim_idx = sims.argmax()
-            max_sim_val = sims[0, max_sim_idx]
-
-            if max_sim_val > 0.85:
-                similar_item = past_items["Items"][max_sim_idx]
+            if sims.size > 0 and sims.max() > 0.85:
+                idx = sims[0].argmax()
+                similar_item = prev_items["Items"][idx]
                 return AskResponse(
-                    question=similar_item["question"],
-                    answer=similar_item["answer"],
-                    confidence=similar_item["confidence"],
-                    reasoning=similar_item["reasoning"],
-                    source=json.loads(similar_item["source"]),
-                    verified=similar_item["verified"]
+                    question=similar_item.get("question", ""),
+                    answer=similar_item.get("answer", ""),
+                    confidence=float(similar_item.get("confidence", 0.0)),
+                    reasoning=similar_item.get("reasoning", ""),
+                    source=json.loads(similar_item.get("source")) if similar_item.get("source") else None,
+                    verified=similar_item.get("verified", False),
                 )
 
-        headers = {
-            "Authorization": f"Bearer {MISTRAL_API_KEY}",
-            "Content-Type": "application/json"
-        }
-
-        prompt = PROMPT_TEMPLATE.format(question=payload.question)
+        # Prepare LLM API call
+        try:
+            prompt = safe_format_prompt(PROMPT_TEMPLATE, payload.question)
+        except Exception as e:
+            logger.exception("Prompt formatting error.")
+            raise HTTPException(status_code=500, detail="Prompt formatting failed.")
 
         data = {
             "model": MISTRAL_LLM_MODEL,
             "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "document_url",
-                            "document_url": s3_url
-                        }
-                    ]
-                }
+                {"role": "user", "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "document_url", "document_url": s3_url}
+                ]}
             ],
             "document_image_limit": 8,
-            "document_page_limit": 1000
+            "document_page_limit": 1000,
         }
 
-        async with httpx.AsyncClient(timeout=180) as client:
-            resp = await client.post(MISTRAL_API_URL, headers=headers, json=data)
+        async with httpx.AsyncClient(timeout=180) as http_client:
+            try:
+                resp = await http_client.post(
+                    MISTRAL_API_URL,
+                    headers={
+                        "Authorization": f"Bearer {MISTRAL_API_KEY}",
+                        "Content-Type": "application/json"
+                    },
+                    json=data
+                )
+            except Exception as e:
+                logger.exception("Failed Mistral LLM API call")
+                raise HTTPException(status_code=500, detail=f"Mistral API call failed: {str(e)}")
 
-            if resp.status_code != 200:
-                raise HTTPException(status_code=resp.status_code, detail=resp.text)
+        if resp.status_code != 200:
+            raise HTTPException(status_code=resp.status_code, detail=resp.text)
 
-            result_text = resp.json()["choices"][0]["message"]["content"]
+        resp_json = resp.json()
+        result_text = resp_json.get("choices", [{}])[0].get("message", {}).get("content", "")
+        parsed = extract_json_from_llm_response(result_text)
 
-            match = re.search(r'```json\s*(\{.*?\})\s*```', result_text, re.DOTALL)
-            if not match:
-                raise HTTPException(status_code=500, detail="No valid JSON block found.")
+        # Validate required fields
+        required_fields = ["question", "answer", "confidence", "reasoning", "source", "verified"]
+        for field in required_fields:
+            if field not in parsed:
+                raise HTTPException(status_code=500, detail=f"LLM response missing '{field}'.")
 
-            parsed = json.loads(match.group(1).strip())
+        # Type and range checks
+        if not isinstance(parsed["question"], str):
+            raise HTTPException(status_code=500, detail="LLM field 'question' must be string")
+        if not isinstance(parsed["answer"], str):
+            raise HTTPException(status_code=500, detail="LLM field 'answer' must be string")
+        if (
+            not isinstance(parsed["confidence"], (float, int))
+            or not (0.0 <= float(parsed["confidence"]) <= 1.0)
+        ):
+            raise HTTPException(status_code=500, detail="LLM field 'confidence' out of range (0.0-1.0)")
+        if not isinstance(parsed["reasoning"], str):
+            raise HTTPException(status_code=500, detail="LLM field 'reasoning' must be string")
+        if not isinstance(parsed["verified"], bool):
+            raise HTTPException(status_code=500, detail="LLM field 'verified' must be bool")
+        if parsed["source"] is not None and not isinstance(parsed["source"], dict):
+            raise HTTPException(status_code=500, detail="LLM field 'source' must be dict or null")
 
-            # Type checks for parsed fields
-            if not isinstance(parsed.get("question"), str):
-                raise HTTPException(status_code=500, detail="Invalid LLM response: missing 'question'")
-            if not isinstance(parsed.get("answer"), str):
-                raise HTTPException(status_code=500, detail="Invalid LLM response: missing 'answer'")
-            if not isinstance(parsed.get("confidence"), (float, int)):
-                raise HTTPException(status_code=500, detail="Invalid LLM response: missing 'confidence'")
-            if not isinstance(parsed.get("reasoning"), str):
-                raise HTTPException(status_code=500, detail="Invalid LLM response: missing 'reasoning'")
-            if "source" not in parsed:
-                raise HTTPException(status_code=500, detail="Invalid LLM response: missing 'source'")
-            if not isinstance(parsed.get("verified"), bool):
-                raise HTTPException(status_code=500, detail="Invalid LLM response: missing 'verified'")
+        # Extra optional fields
+        if "data_quality_notes" in parsed and parsed["data_quality_notes"] and not isinstance(parsed["data_quality_notes"], str):
+            raise HTTPException(status_code=500, detail="LLM field 'data_quality_notes' must be string or null")
+        if "alternative_interpretations" in parsed and parsed["alternative_interpretations"] and not isinstance(parsed["alternative_interpretations"], list):
+            raise HTTPException(status_code=500, detail="LLM field 'alternative_interpretations' must be list or null")
 
-            timestamp = datetime.datetime.now().isoformat()
+        # Save to DynamoDB conversation table
+        timestamp = datetime.datetime.now().isoformat()
+        item = {
+            "user_id": user_id,
+            "file_hash_timestamp": f"{payload.file_hash}#{timestamp}",
+            "file_hash": payload.file_hash,
+            "question": parsed["question"],
+            "answer": parsed["answer"],
+            "confidence": Decimal(str(parsed["confidence"])),
+            "reasoning": parsed["reasoning"],
+            "source": json.dumps(parsed["source"]),
+            "verified": parsed["verified"]
+        }
+        if "data_quality_notes" in parsed and parsed["data_quality_notes"]:
+            item["data_quality_notes"] = parsed["data_quality_notes"]
+        if "alternative_interpretations" in parsed and parsed["alternative_interpretations"]:
+            item["alternative_interpretations"] = json.dumps(parsed["alternative_interpretations"])
+        conversation_table.put_item(Item=item)
 
-            conversation_table.put_item(Item={
-                "user_id": user_id,
-                "file_hash_timestamp": f"{payload.file_hash}#{timestamp}",
-                "file_hash": payload.file_hash,
-                "question": parsed["question"],
-                "answer": parsed["answer"],
-                "confidence": Decimal(str(parsed["confidence"])),
-                "reasoning": parsed["reasoning"],
-                "source": json.dumps(parsed["source"]),
-                "verified": parsed["verified"]
-            })
+        # Return as Pydantic model
+        return AskResponse(**parsed)
 
-            # Return as validated Pydantic model
-            return AskResponse(**parsed)
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error in process_question: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"process_question failed: {str(e)}")

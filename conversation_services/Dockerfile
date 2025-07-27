@@ -1,20 +1,24 @@
-# Use the official Python image from the Docker Hub
-FROM python:3.9-slim
+# Use the official Python 3.11 slim image as the base
+FROM python:3.11-slim
 
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy the current directory contents into the container at /app
+# Upgrade & update, then clean up apt cache to reduce image size
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
+# Copy your project files into the container
 COPY . /app
 
-# Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Make port 80 available to the world outside this container
+# Expose the FastAPI port
 EXPOSE 8001
 
-# Define environment variable
-ENV NAME CONVOService
+# Optional: Set a name environment variable (can be omitted or customized)
+ENV NAME=CONVOService
 
-# Run app.py when the container launches
+# Start the FastAPI app using uvicorn
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]

@@ -1,96 +1,86 @@
-# Import necessary libraries for AWS Cognito and environment management
 import boto3
 import os
+import logging
 from fastapi import HTTPException
 from botocore.exceptions import ClientError, BotoCoreError
 from dotenv import load_dotenv
 from utils import get_secret_hash
 
-# Load environment variables from a .env file
 load_dotenv()
 
-
-# Retrieve AWS and Cognito configuration from environment variables
 AWS_REGION = os.getenv("AWS_REGION")
 COGNITO_USER_POOL_ID = os.getenv("COGNITO_USER_POOL_ID")
 COGNITO_CLIENT_ID = os.getenv("COGNITO_APP_CLIENT_ID")
 COGNITO_CLIENT_SECRET = os.getenv("COGNITO_CLIENT_SECRET")
 
-# Check if all required environment variables are set
 if not all([AWS_REGION, COGNITO_USER_POOL_ID, COGNITO_CLIENT_ID, COGNITO_CLIENT_SECRET]):
     raise HTTPException(status_code=500, detail="Server configuration error.")
 
-# Initialize the Cognito client
 try:
     client = boto3.client("cognito-idp", region_name=AWS_REGION)
 except Exception as e:
+    logging.exception("Failed to initialize Cognito client")
     raise HTTPException(status_code=500, detail="Internal server error.")
 
-# Function to handle forgot password requests
-def forgot_password(email: str):
+def forgot_password(email: str) -> dict:
     """
-    Start the forgot password flow for a user.
-    This verifies the user exists, then triggers Cognito to send a reset code.
+    Initiate forgot password flow for the Cognito user.
 
     Args:
-        email (str): The user's email address.
-
-    Raises:
-        HTTPException: For missing email or Cognito errors.
+        email (str): User email.
 
     Returns:
-        dict: Success message if the code is sent.
+        dict: Success message.
+
+    Raises:
+        HTTPException: For any error condition.
     """
-    # Validate email input
     if not email:
         raise HTTPException(status_code=400, detail="Email is required.")
+
     try:
-        # Verify the user exists in the User Pool
-        client.admin_get_user(
-            UserPoolId=COGNITO_USER_POOL_ID,
-            Username=email
-        )
-        # Request Cognito to send a forgot password confirmation code to the user
+        client.admin_get_user(UserPoolId=COGNITO_USER_POOL_ID, Username=email)
         client.forgot_password(
             ClientId=COGNITO_CLIENT_ID,
             SecretHash=get_secret_hash(email),
             Username=email
         )
         return {"message": "Forgot password code sent successfully."}
-
     except ClientError as e:
         error_code = e.response['Error']['Code']
-        # Handle user not found or invalid input
         if error_code == 'UserNotFoundException':
             raise HTTPException(status_code=404, detail="User not found.")
         elif error_code == 'InvalidParameterException':
             raise HTTPException(status_code=400, detail="Invalid email format.")
         else:
-            raise HTTPException(status_code=400, detail="Failed to send forgot password code.")
+            logging.error(f"ClientError in forgot_password: {e}")
+            raise HTTPException(status_code=400, detail=f"Failed to send forgot password code: {error_code}")
     except BotoCoreError:
+        logging.exception("BotoCoreError in forgot_password")
         raise HTTPException(status_code=500, detail="Internal server error.")
+    except Exception as e:
+        logging.exception("Unknown error in forgot_password")
+        raise HTTPException(status_code=500, detail="Unexpected error in forgot password.")
 
-# Function to confirm password reset with a code
-def confirm_forgot_password(email: str, code: str, new_password: str):
+def confirm_forgot_password(email: str, code: str, new_password: str) -> dict:
     """
-    Confirm the user's password reset by providing the received code and new password.
+    Confirm password reset with code and new password.
 
     Args:
-        email (str): The user's email address.
-        code (str): The confirmation code received by email.
-        new_password (str): The new password to set.
-
-    Raises:
-        HTTPException: For missing input, invalid code, or Cognito errors.
+        email (str): User email.
+        code (str): Confirmation code.
+        new_password (str): New password.
 
     Returns:
-        dict: Success message if the password is reset.
+        dict: Success message.
+
+    Raises:
+        HTTPException: For any error condition.
     """
-    # Validate input parameters
     if not all([email, code, new_password]):
         raise HTTPException(status_code=400, detail="Email, code, and new password are required.")
+
     try:
-        # Call Cognito to confirm the password reset using the code
         client.confirm_forgot_password(
             ClientId=COGNITO_CLIENT_ID,
             SecretHash=get_secret_hash(email),
@@ -99,10 +89,8 @@ def confirm_forgot_password(email: str, code: str, new_password: str):
             Password=new_password
         )
         return {"message": "Password reset successful."}
-
     except ClientError as e:
         error_code = e.response['Error']['Code']
-        # Handle invalid or expired code, invalid password, or user not found
         if error_code == 'CodeMismatchException':
             raise HTTPException(status_code=400, detail="Invalid confirmation code.")
         elif error_code == 'ExpiredCodeException':
@@ -112,41 +100,42 @@ def confirm_forgot_password(email: str, code: str, new_password: str):
         elif error_code == 'UserNotFoundException':
             raise HTTPException(status_code=404, detail="User not found.")
         else:
-            raise HTTPException(status_code=400, detail="Failed to confirm forgot password.")
+            logging.error(f"ClientError in confirm_forgot_password: {e}")
+            raise HTTPException(status_code=400, detail=f"Failed to confirm forgot password: {error_code}")
     except BotoCoreError:
+        logging.exception("BotoCoreError in confirm_forgot_password")
         raise HTTPException(status_code=500, detail="Internal server error.")
+    except Exception as e:
+        logging.exception("Unknown error in confirm_forgot_password")
+        raise HTTPException(status_code=500, detail="Unexpected error in confirm forgot password.")
 
-# Function to change the user's password when logged in
-def change_password(access_token: str, old_password: str, new_password: str):
+def change_password(access_token: str, old_password: str, new_password: str) -> dict:
     """
-    Change the password for a signed-in user using their current password.
+    Change user's password (while logged in).
 
     Args:
-        access_token (str): The valid access token for the authenticated user.
-        old_password (str): The user's current password.
-        new_password (str): The new password to be set.
-
-    Raises:
-        HTTPException: For missing input, auth issues, or Cognito errors.
+        access_token (str): User's Cognito access token.
+        old_password (str): Old password.
+        new_password (str): New password.
 
     Returns:
-        dict: Success message if the password is changed.
+        dict: Success message.
+
+    Raises:
+        HTTPException: For any error condition.
     """
-    # Validate input parameters
     if not all([access_token, old_password, new_password]):
         raise HTTPException(status_code=400, detail="Access token, old password, and new password are required.")
+
     try:
-        # Call Cognito to change the password using the access token
         client.change_password(
             PreviousPassword=old_password,
             ProposedPassword=new_password,
             AccessToken=access_token
         )
         return {"message": "Password changed successfully."}
-
     except ClientError as e:
         error_code = e.response['Error']['Code']
-        # Handle token or password errors
         if error_code == 'NotAuthorizedException':
             raise HTTPException(status_code=401, detail="Invalid or expired access token.")
         elif error_code == 'InvalidParameterException':
@@ -156,54 +145,55 @@ def change_password(access_token: str, old_password: str, new_password: str):
         elif error_code == 'LimitExceededException':
             raise HTTPException(status_code=429, detail="Attempt limit exceeded, please try again later.")
         else:
-            raise HTTPException(status_code=400, detail="Failed to change password.")
+            logging.error(f"ClientError in change_password: {e}")
+            raise HTTPException(status_code=400, detail=f"Failed to change password: {error_code}")
     except BotoCoreError:
+        logging.exception("BotoCoreError in change_password")
         raise HTTPException(status_code=500, detail="Internal server error.")
+    except Exception as e:
+        logging.exception("Unknown error in change_password")
+        raise HTTPException(status_code=500, detail="Unexpected error changing password.")
 
-# Function to resend the signup confirmation code to the user
-def resend_confirmation_code(email: str):
+def resend_confirmation_code(email: str) -> dict:
     """
-    Resend the confirmation code for email verification during signup.
+    Resend signup confirmation code for the user.
 
     Args:
-        email (str): The user's email address.
-
-    Raises:
-        HTTPException: For missing email, already confirmed users, or Cognito errors.
+        email (str): User email.
 
     Returns:
-        dict: Success message if the code is resent.
+        dict: Success message.
+
+    Raises:
+        HTTPException: For any error condition.
     """
-    # Validate email input
     if not email:
         raise HTTPException(status_code=400, detail="Email is required.")
-    try:
-        # Check user status to ensure they are not already confirmed
-        user = client.admin_get_user(
-            UserPoolId=COGNITO_USER_POOL_ID,
-            Username=email
-        )
 
+    try:
+        user = client.admin_get_user(UserPoolId=COGNITO_USER_POOL_ID, Username=email)
         if user.get("UserStatus") == "CONFIRMED":
-            # User already confirmed, so do not resend code
             raise HTTPException(status_code=400, detail="User is already confirmed.")
 
-        # Request Cognito to resend the confirmation code
         client.resend_confirmation_code(
             ClientId=COGNITO_CLIENT_ID,
             SecretHash=get_secret_hash(email),
             Username=email
         )
         return {"message": "Confirmation code resent successfully."}
-
     except ClientError as e:
         error_code = e.response['Error']['Code']
-        # Handle errors like user not found or invalid email
         if error_code == 'UserNotFoundException':
             raise HTTPException(status_code=404, detail="User not found.")
         elif error_code == 'InvalidParameterException':
             raise HTTPException(status_code=400, detail="Invalid email format.")
         else:
-            raise HTTPException(status_code=400, detail="Failed to resend confirmation code.")
+            logging.error(f"ClientError in resend_confirmation_code: {e}")
+            raise HTTPException(status_code=400, detail=f"Failed to resend confirmation code: {error_code}")
     except BotoCoreError:
+        logging.exception("BotoCoreError in resend_confirmation_code")
         raise HTTPException(status_code=500, detail="Internal server error.")
+    except Exception as e:
+        logging.exception("Unknown error in resend_confirmation_code")
+        raise HTTPException(status_code=500, detail="Unexpected error resending confirmation code.")
+

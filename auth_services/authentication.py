@@ -1,51 +1,47 @@
-# Import necessary libraries for AWS Cognito and environment management
 import boto3
 import os
+import logging
 from fastapi import HTTPException
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, BotoCoreError
 from dotenv import load_dotenv
 from utils import get_secret_hash
 
-# Load environment variables from a .env file
 load_dotenv()
 
-# Retrieve AWS and Cognito configuration from environment variables
 AWS_REGION = os.getenv("AWS_REGION")
 COGNITO_USER_POOL_ID = os.getenv("COGNITO_USER_POOL_ID")
 COGNITO_CLIENT_ID = os.getenv("COGNITO_APP_CLIENT_ID")
 COGNITO_CLIENT_SECRET = os.getenv("COGNITO_CLIENT_SECRET")
 
-# Validate configuration
 if not all([AWS_REGION, COGNITO_USER_POOL_ID, COGNITO_CLIENT_ID, COGNITO_CLIENT_SECRET]):
     raise HTTPException(status_code=500, detail="Server configuration error.")
 
-# Initialize the Cognito client
 try:
     client = boto3.client("cognito-idp", region_name=AWS_REGION)
 except Exception as e:
+    logging.exception("Failed to initialize Cognito client")
     raise HTTPException(status_code=500, detail="Internal server error.")
 
-# Function to sign up a new user
-def sign_up(email: str, password: str, name: str):
+def sign_up(email: str, password: str, name: str) -> dict:
     """
-    Sign up a new user in the Cognito User Pool.
+    Register new user with Cognito.
 
     Args:
-        email (str): User's email address.
-        password (str): User's password.
+        email (str): Email address.
+        password (str): Password.
         name (str): User's full name.
 
-    Raises:
-        HTTPException: If required fields are missing or Cognito returns an error.
-
     Returns:
-        dict: Success message with the created email.
+        dict: Confirmation message.
+
+    Raises:
+        HTTPException: For AWS or validation errors.
     """
     if not email or not password or not name:
         raise HTTPException(status_code=400, detail="Email, password, and name are required.")
+
     try:
-        # Call Cognito's sign up API with email, password, and name
-        response = client.sign_up(
+        client.sign_up(
             ClientId=COGNITO_CLIENT_ID,
             SecretHash=get_secret_hash(email),
             Username=email,
@@ -55,9 +51,9 @@ def sign_up(email: str, password: str, name: str):
                 {"Name": "email", "Value": email}
             ]
         )
+        return {"message": f"User account created for {email}."}
     except ClientError as e:
         error_code = e.response['Error']['Code']
-        # Handle common signup errors gracefully
         if error_code == 'UsernameExistsException':
             raise HTTPException(status_code=409, detail="Email already exists.")
         elif error_code == 'InvalidPasswordException':
@@ -65,28 +61,33 @@ def sign_up(email: str, password: str, name: str):
         elif error_code == 'InvalidParameterException':
             raise HTTPException(status_code=400, detail="Invalid parameters. Check email or name format.")
         else:
+            logging.error(f"ClientError in sign_up: {e}")
             raise HTTPException(status_code=400, detail="Sign up failed. Please try again.")
-    return {"message": f"User account created for {email}."}
+    except BotoCoreError:
+        logging.exception("BotoCoreError in sign_up")
+        raise HTTPException(status_code=500, detail="Internal server error.")
+    except Exception as e:
+        logging.exception("Unknown error in sign_up")
+        raise HTTPException(status_code=500, detail="Unexpected error during signup.")
 
-# Function to log in an existing user
-def login(email: str, password: str):
+def login(email: str, password: str) -> dict:
     """
-    Authenticate a user and retrieve tokens.
+    Authenticate user against Cognito.
 
     Args:
-        email (str): User's email address.
-        password (str): User's password.
-
-    Raises:
-        HTTPException: If authentication fails or input is invalid.
+        email (str): Email address.
+        password (str): Password.
 
     Returns:
-        dict: Tokens (ID, access, refresh) and user profile info.
+        dict: Tokens and basic user info.
+
+    Raises:
+        HTTPException: For login or AWS errors.
     """
     if not email or not password:
         raise HTTPException(status_code=400, detail="Email and password required.")
+
     try:
-        # Call Cognito to initiate the authentication flow
         auth_response = client.initiate_auth(
             ClientId=COGNITO_CLIENT_ID,
             AuthFlow='USER_PASSWORD_AUTH',
@@ -96,34 +97,24 @@ def login(email: str, password: str):
                 'SECRET_HASH': get_secret_hash(email)
             }
         )
-
-        # Extract returned JWT tokens
-        id_token = auth_response['AuthenticationResult']['IdToken']
-        access_token = auth_response['AuthenticationResult']['AccessToken']
-        refresh_token = auth_response['AuthenticationResult']['RefreshToken']
-
-        # Get user attributes to retrieve the 'name'
+        tokens = auth_response['AuthenticationResult']
         user_response = client.admin_get_user(
             UserPoolId=COGNITO_USER_POOL_ID,
             Username=email
         )
-
-        # Extract the 'name' field from user attributes
         name_attr = next(
             (attr['Value'] for attr in user_response['UserAttributes'] if attr['Name'] == 'name'),
             None
         )
-
         return {
-            "access_token": access_token,
-            "id_token": id_token,
-            "refresh_token": refresh_token,
+            "access_token": tokens.get("AccessToken"),
+            "id_token": tokens.get("IdToken"),
+            "refresh_token": tokens.get("RefreshToken"),
             "name": name_attr,
             "email": email
         }
     except ClientError as e:
         error_code = e.response['Error']['Code']
-        # Handle authentication-specific errors
         if error_code == 'NotAuthorizedException':
             raise HTTPException(status_code=401, detail="Invalid email or password.")
         elif error_code == 'UserNotFoundException':
@@ -131,28 +122,34 @@ def login(email: str, password: str):
         elif error_code == 'PasswordResetRequiredException':
             raise HTTPException(status_code=403, detail="Password reset required. Please reset your password.")
         else:
+            logging.error(f"ClientError in login: {e}")
             raise HTTPException(status_code=400, detail="Login failed. Please try again.")
+    except BotoCoreError:
+        logging.exception("BotoCoreError in login")
+        raise HTTPException(status_code=500, detail="Internal server error.")
+    except Exception as e:
+        logging.exception("Unknown error in login")
+        raise HTTPException(status_code=500, detail="Unexpected error during login.")
 
-# Function to refresh tokens for an existing user session
-def refresh_token(email: str, refresh_token: str):
+def refresh_token(email: str, refresh_token: str) -> dict:
     """
-    Refresh authentication tokens using a valid refresh token.
+    Refresh JWT tokens using Cognito.
 
     Args:
-        email (str): User's email address.
-        refresh_token (str): Valid refresh token.
-
-    Raises:
-        HTTPException: If refresh fails or input is invalid.
+        email (str): User's email.
+        refresh_token (str): Refresh token.
 
     Returns:
-        dict: New authentication tokens.
+        dict: New tokens.
+
+    Raises:
+        HTTPException: For errors.
     """
     if not email or not refresh_token:
-        raise HTTPException(400, "Email and refresh token required.")
+        raise HTTPException(status_code=400, detail="Email and refresh token required.")
+
     try:
-        # Call Cognito's refresh token API to get new tokens
-        return client.initiate_auth(
+        response = client.initiate_auth(
             ClientId=COGNITO_CLIENT_ID,
             AuthFlow='REFRESH_TOKEN_AUTH',
             AuthParameters={
@@ -160,38 +157,57 @@ def refresh_token(email: str, refresh_token: str):
                 'SECRET_HASH': get_secret_hash(email)
             }
         )
+        if 'AuthenticationResult' not in response:
+            raise HTTPException(status_code=400, detail="Failed to refresh token, response invalid.")
+        result = response["AuthenticationResult"]
+        return {
+            "access_token": result.get("AccessToken"),
+            "id_token": result.get("IdToken"),
+            "refresh_token": result.get("RefreshToken")
+        }
     except ClientError as e:
         error_code = e.response['Error']['Code']
         if error_code == 'NotAuthorizedException':
-            raise HTTPException(401, "Invalid refresh token.")
+            raise HTTPException(status_code=401, detail="Invalid refresh token.")
         else:
-            raise HTTPException(400, "Token refresh failed. Please try again.")
+            logging.error(f"ClientError in refresh_token: {e}")
+            raise HTTPException(status_code=400, detail="Token refresh failed. Please try again.")
+    except BotoCoreError:
+        logging.exception("BotoCoreError in refresh_token")
+        raise HTTPException(status_code=500, detail="Internal server error.")
+    except Exception as e:
+        logging.exception("Unknown error in refresh_token")
+        raise HTTPException(status_code=500, detail="Unexpected error refreshing token.")
 
-# Function to sign out a user globally from all devices
-def logout(access_token: str):
+def logout(access_token: str) -> dict:
     """
-    Perform a global sign-out for the user, invalidating all active sessions.
+    Log the user out globally by invalidating tokens.
 
     Args:
-        access_token (str): User's valid access token.
-
-    Raises:
-        HTTPException: If logout fails or token is invalid.
+        access_token (str): Cognito access token.
 
     Returns:
-        dict: Success message.
+        dict: Message on success.
+
+    Raises:
+        HTTPException: For AWS errors.
     """
     if not access_token:
         raise HTTPException(status_code=400, detail="Access token required for logout.")
+
     try:
-        # Use Cognito's global sign-out to invalidate all sessions
-        client.global_sign_out(
-            AccessToken=access_token
-        )
+        client.global_sign_out(AccessToken=access_token)
+        return {"message": "Account Logged Out"}
     except ClientError as e:
         error_code = e.response['Error']['Code']
         if error_code == 'NotAuthorizedException':
-            raise HTTPException(401, "Invalid or expired token.")
+            raise HTTPException(status_code=401, detail="Invalid or expired token.")
         else:
-            raise HTTPException(400, "Logout failed. Please try again.")
-    return {"message": "Account Logged Out"}
+            logging.error(f"ClientError in logout: {e}")
+            raise HTTPException(status_code=400, detail="Logout failed. Please try again.")
+    except BotoCoreError:
+        logging.exception("BotoCoreError in logout")
+        raise HTTPException(status_code=500, detail="Internal server error.")
+    except Exception as e:
+        logging.exception("Unknown error in logout")
+        raise HTTPException(status_code=500, detail="Unexpected error during logout.")

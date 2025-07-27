@@ -1,4 +1,3 @@
-# Import necessary modules for cryptographic operations, environment variable loading, and logging
 import hmac
 import hashlib
 import base64
@@ -6,61 +5,61 @@ import os
 from fastapi import Request, HTTPException, status
 from dotenv import load_dotenv
 
-# Load environment variables from a .env file
 load_dotenv()
 
-# Retrieve Cognito client ID and secret from environment variables
 COGNITO_CLIENT_ID = os.getenv("COGNITO_APP_CLIENT_ID")
 COGNITO_CLIENT_SECRET = os.getenv("COGNITO_CLIENT_SECRET")
 
+if not COGNITO_CLIENT_ID or not COGNITO_CLIENT_SECRET:
+    raise RuntimeError("Missing Cognito client credentials. Update your environment variables.")
+
 def get_secret_hash(username: str) -> str:
     """
-    Generate a secret hash using the Cognito app client ID and secret.
-
-    This hash is used when signing up or signing in a user with AWS Cognito
-    to securely verify the request.
+    Generate a base64-encoded HMAC-SHA256 hash using Cognito client secret.
 
     Args:
-        username (str): The username or email of the Cognito user.
+        username (str): Cognito user's username (email).
 
     Returns:
-        str: The base64-encoded HMAC-SHA256 hash string.
-    """
-    # Concatenate username and client ID to form the message
-    message = username + COGNITO_CLIENT_ID
+        str: The base64-encoded secret hash.
 
-    # Create HMAC using the client secret and SHA-256
+    Raises:
+        ValueError: If username is missing.
+    """
+    if not username:
+        raise ValueError("Username required for secret hash generation.")
+    message = username + COGNITO_CLIENT_ID
     dig = hmac.new(
         COGNITO_CLIENT_SECRET.encode(),
         msg=message.encode(),
         digestmod=hashlib.sha256
     ).digest()
-
-    # Encode the binary digest to a base64 string
     return base64.b64encode(dig).decode()
 
-
-def get_access_token(request: Request):
+def get_access_token(request: Request) -> str:
     """
-    Extract the access token from the Authorization header in the request.
-
-    This token is used to authenticate the user in protected routes.
+    Extract and validate the Bearer access token from request headers.
 
     Args:
-        request (Request): The incoming FastAPI request object.
-
-    Raises:
-        HTTPException: If the Authorization header is missing or invalid.
+        request (Request): FastAPI request context.
 
     Returns:
-        str: The extracted raw access token string.
+        str: Access token if valid.
+
+    Raises:
+        HTTPException: If missing or improperly formatted Authorization header.
     """
     token = request.headers.get("Authorization")
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Access token missing",
+            detail="Access token missing"
         )
-    # Split the header to get the token part from 'Bearer <token>'
-    extracted_token = token.split(" ")[1]
-    return extracted_token
+    parts = token.split(" ")
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Authorization header format"
+        )
+    return parts[1]
+

@@ -1,20 +1,22 @@
-# Use the official Python image from the Docker Hub
-FROM python:3.9-slim
+# Use Python 3.11 for better performance/security, unless your project requires 3.9
+FROM python:3.11-slim
 
-# Set the working directory in the container
 WORKDIR /app
 
-# Copy the current directory contents into the container at /app
-COPY . /app
-
-# Install any needed packages specified in requirements.txt
+# Install requirements
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Make port 80 available to the world outside this container
+# Now copy application code (after dependencies for Docker cache optimization)
+COPY . /app
+
+# (Optional) Copy .env if you want it in the image (not for production)
+# COPY .env .env
+
+# Expose the correct port (matching uvicorn)
 EXPOSE 8000
 
-# Define environment variable
-ENV NAME AUTHService
+# (Optional) Informational environment variable
+ENV NAME=AUTHService
 
-# Run app.py when the container launches
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

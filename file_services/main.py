@@ -1,48 +1,27 @@
-from http import HTTPStatus
-
 from fastapi import FastAPI, HTTPException, File, status, Header, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from file_handler import handle_upload, list_user_files, delete_user_file
-from schemas import DeleteFileRequest , DownloadFileRequest
+from file_handler import handle_upload, list_user_files, delete_user_file, generate_presigned_url
+from schemas import DeleteFileRequest, DownloadFileRequest
 from utils import get_user_from_token
 
 app = FastAPI()
 
-# Add CORS middleware to allow cross-origin requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for simplicity
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Health check endpoint
 @app.get("/file/health")
 def health():
-    """
-    Health check for the file service.
-
-    Returns:
-        dict: Service health status.
-    """
+    """Health check endpoint for the file service."""
     return {"health": "All Good"}
 
 @app.post("/file/upload", status_code=status.HTTP_201_CREATED)
-async def upload_file(
-    file: UploadFile = File(...),
-    authorization: str = Header(None)
-):
-    """
-    Upload a file for the authenticated user.
-
-    Args:
-        file (UploadFile): The file to upload.
-        authorization (str): Bearer token from request headers.
-
-    Returns:
-        dict: Upload result with metadata or error details.
-    """
+async def upload_file(file: UploadFile = File(...), authorization: str = Header(None)):
+    """Upload a file for the authenticated user."""
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header missing.")
     access_token = authorization.replace("Bearer ", "").strip()
@@ -61,16 +40,8 @@ async def upload_file(
         raise HTTPException(status_code=500, detail="Unexpected server error during file upload.")
 
 @app.get("/file/list-uploads")
-async def list_uploads(authorization: str = Header(...)):
-    """
-    List all files uploaded by the authenticated user.
-
-    Args:
-        authorization (str): Bearer token from request headers.
-
-    Returns:
-        dict: List of uploaded files or a message if none found.
-    """
+async def list_uploads(authorization: str = Header(None)):
+    """List all files uploaded by the authenticated user."""
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header missing.")
     access_token = authorization.replace("Bearer ", "").strip()
@@ -87,17 +58,8 @@ async def list_uploads(authorization: str = Header(...)):
     return {"files": files}
 
 @app.delete("/file/delete-file")
-async def delete_file(payload: DeleteFileRequest, authorization: str = Header(...)):
-    """
-    Delete a specific file and its metadata for the authenticated user.
-
-    Args:
-        payload (DeleteFileRequest): Contains file_hash to delete.
-        authorization (str): Bearer token from request headers.
-
-    Returns:
-        dict: Deletion status message.
-    """
+async def delete_file(payload: DeleteFileRequest, authorization: str = Header(None)):
+    """Delete a specific file and its metadata for the authenticated user."""
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header missing.")
     access_token = authorization.replace("Bearer ", "").strip()
@@ -115,21 +77,9 @@ async def delete_file(payload: DeleteFileRequest, authorization: str = Header(..
         raise HTTPException(status_code=404, detail=message)
     return {"message": message}
 
-@app.post("/file/download",status_code=HTTPStatus.OK)
-async def download_file(
-    payload: DownloadFileRequest,
-    authorization: str = Header(None)
-):
-    """
-    Generate a secure download link (presigned URL) for a file.
-
-    Args:
-        payload (DownloadFileRequest): Contains file_hash for the file to download.
-        authorization (str): Bearer token from request headers.
-
-    Returns:
-        dict: Presigned URL for downloading the file.
-    """
+@app.post("/file/download", status_code=status.HTTP_200_OK)
+async def download_file(payload: DownloadFileRequest, authorization: str = Header(None)):
+    """Generate a secure download link (presigned URL) for a file."""
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header missing.")
     access_token = authorization.replace("Bearer ", "").strip()
@@ -140,7 +90,6 @@ async def download_file(
     if not payload.file_hash or payload.file_hash.strip() == "":
         raise HTTPException(status_code=400, detail="file_hash is required.")
     try:
-        from file_handler import generate_presigned_url
         url = generate_presigned_url(user["Username"], payload.file_hash)
         return {"url": url}
     except HTTPException:

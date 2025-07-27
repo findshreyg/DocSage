@@ -29,13 +29,19 @@ http://localhost:8001
 
 ---
 
-### 🔹 Get All Conversations
+### 🔹 Get All Conversations for a user under a file
 
-- **Endpoint**: `/conversation/get-all-conversations`
+- **Endpoint**: `/conversation/get-file-conversations`
 - **Method**: POST
 - **Description**: Retrieve **all conversations** for the authenticated user.
 - **Headers**:
   - `Authorization`: Bearer token
+- **Request Body**:
+  ```json
+  {
+    "file_hash": "file123hash"
+  }
+  ```
 - **Responses**:
   - `200 OK`: `{ "conversations": [...], "message": "Conversations retrieved successfully." }`
   - `401 Unauthorized`: Authorization header missing.

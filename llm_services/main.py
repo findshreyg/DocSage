@@ -1,4 +1,4 @@
-from fastapi import HTTPException, FastAPI, Header
+from fastapi import FastAPI, HTTPException, Header, status
 from fastapi.middleware.cors import CORSMiddleware
 from mistral_llm import process_question
 from schemas import AskRequest, AskResponse
@@ -6,53 +6,44 @@ from utils import get_user_from_token
 
 app = FastAPI()
 
-# Add CORS middleware to allow cross-origin requests
+# CORS Middleware for development - restrict origins as needed for production!
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for simplicity
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*"]
 )
 
 @app.get("/llm/health")
-def health():
+def health() -> dict:
     """
     Health check endpoint for the LLM microservice.
-
     Returns:
-        dict: Simple status indicating the service is online.
+        dict: Service status indicator.
     """
     return {"health": "All Good"}
 
-@app.post("/llm/ask" , response_model=AskResponse, status_code=200)
-async def ask_question(payload: AskRequest, authorization: str = Header(None)):
+@app.post("/llm/ask", response_model=AskResponse, status_code=status.HTTP_200_OK)
+async def ask_question(payload: AskRequest, authorization: str = Header(None)) -> AskResponse:
     """
     Submit a user question to the Mistral LLM for processing.
-
-    This endpoint authenticates the user via the access token,
-    checks for required fields, and forwards the question and file hash
-    to the LLM handler to generate a structured answer.
-
     Args:
-        payload (AskRequest): The input payload containing the file_hash and question.
+        payload (AskRequest): The file_hash and user question.
         authorization (str): Bearer token for user authentication.
-
     Returns:
-        AskResponse: The generated structured answer from the LLM.
-
+        AskResponse: Structured LLM answer.
     Raises:
-        HTTPException:
-            - 401 if the Authorization header is missing or the token is invalid.
-            - 400 if the file_hash is missing in the request.
-            - 500 for unexpected internal errors or empty LLM response.
+        HTTPException: On missing auth, missing fields, or server errors.
     """
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header missing.")
     access_token = authorization.replace("Bearer ", "").strip()
     try:
         user = get_user_from_token(access_token)
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token.")
     if not payload.file_hash:
         raise HTTPException(status_code=400, detail="file_hash is required.")

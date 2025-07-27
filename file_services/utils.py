@@ -7,6 +7,8 @@ from botocore.exceptions import ClientError
 import os
 from dotenv import load_dotenv
 import logging
+import tempfile
+import subprocess
 
 from fastapi import HTTPException
 
@@ -146,14 +148,13 @@ def get_user_from_token(access_token: str):
         logger.exception(f"Failed to get user from token: {e}")
         raise HTTPException(status_code=401, detail="Invalid or expired access token.")
 
-# Async function to extract metadata using Mistral API
-async def extract_metadata(file_bytes: bytes, file_name: str):
+async def extract_metadata(file_name: str, s3_key: str):
     """
     Use Mistral LLM to extract metadata and suggested questions from document content.
 
     Args:
-        file_bytes (bytes): The file content as bytes.
         file_name (str): The name of the file.
+        s3_key (str): The S3 key of the document.
 
     Raises:
         HTTPException: If LLM call fails or JSON parsing fails.
@@ -162,19 +163,66 @@ async def extract_metadata(file_bytes: bytes, file_name: str):
         dict: Parsed metadata and suggested questions.
     """
     try:
+        s3_client = boto3.client("s3", region_name=AWS_REGION)
+        S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+
+        def convert_to_pdf_if_needed(bucket, key):
+            """
+            Download file from S3, convert to PDF if not already PDF, upload, and return key for presigned URL.
+            """
+            ext = key.lower().split(".")[-1]
+            # Only convert if not already PDF
+            if ext == "pdf":
+                return key
+            converted_key = key + ".converted.pdf"
+            # Check if already converted
+            try:
+                s3_client.head_object(Bucket=bucket, Key=converted_key)
+                return converted_key
+            except ClientError as e:
+                if e.response['Error']['Code'] != '404':
+                    raise
+            # Download, convert, upload
+            with tempfile.TemporaryDirectory() as tmpdir:
+                local_path = os.path.join(tmpdir, os.path.basename(key))
+                s3_client.download_file(bucket, key, local_path)
+                # Convert to PDF using LibreOffice
+                output_path = os.path.splitext(local_path)[0] + ".pdf"
+                subprocess.run([
+                    "libreoffice", "--headless", "--convert-to", "pdf",
+                    "--outdir", tmpdir,
+                    local_path
+                ], check=True)
+                # Find the converted PDF (LibreOffice may not use same name)
+                pdf_files = [f for f in os.listdir(tmpdir) if f.endswith(".pdf")]
+                if not pdf_files:
+                    raise Exception("PDF conversion failed: no PDF output found.")
+                converted_path = os.path.join(tmpdir, pdf_files[0])
+                s3_client.upload_file(converted_path, bucket, converted_key)
+                return converted_key
+
+        # Determine if conversion is needed and get the correct key for presigned URL
+        # Only convert if not PDF, .pptx, .xlsx, .ppt, .xls, etc.
+        ext = s3_key.lower().split(".")[-1]
+        if ext not in ["pdf"]:
+            key_for_url = convert_to_pdf_if_needed(S3_BUCKET_NAME, s3_key)
+        else:
+            key_for_url = s3_key
+
+        s3_url = s3_client.generate_presigned_url(
+            ClientMethod='get_object',
+            Params={'Bucket': S3_BUCKET_NAME, 'Key': key_for_url},
+            ExpiresIn=3600
+        )
         headers = {
             "Authorization": f"Bearer {MISTRAL_API_KEY}",
             "Content-Type": "application/json"
         }
 
-        decoded_content = file_bytes.decode('utf-8', errors='ignore')
-
         prompt = f"""
         You are an intelligent assistant. Analyze the uploaded document '{file_name}'.
-        Here is the file content:
-        {decoded_content}
 
-        Extract the key metadata (title, type, number of pages, created date) and return
+        Use the document to extract the key metadata (title, type, number of pages, created date) and return
         5 likely questions a user might ask about this document. Respond in JSON:
         {{
           "metadata": {{
@@ -186,20 +234,24 @@ async def extract_metadata(file_bytes: bytes, file_name: str):
           "questions": [string, ...]
         }}
         """
-
         data = {
             "model": MISTRAL_LLM_MODEL,
             "messages": [
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": prompt}
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "document_url",
+                            "document_url": s3_url
+                        }
                     ]
                 }
-            ]
+            ],
+            "document_image_limit": 8,
+            "document_page_limit": 1000
         }
 
-        # Make async HTTP call to Mistral LLM API
         async with httpx.AsyncClient(timeout=180) as client:
             resp = await client.post(MISTRAL_API_URL, headers=headers, json=data)
 
@@ -208,15 +260,32 @@ async def extract_metadata(file_bytes: bytes, file_name: str):
                 raise HTTPException(status_code=resp.status_code, detail=resp.text)
 
             result_text = resp.json()["choices"][0]["message"]["content"]
-
-            # Extract JSON block from the LLM output
             match = re.search(r'```json\s*(\{.*?\})\s*```', result_text, re.DOTALL)
-            if match:
-                logger.info(f"Metadata extracted successfully for file_name={file_name}")
-                return json.loads(match.group(1).strip())
-            else:
+            if not match:
                 logger.error("No valid JSON block found in LLM metadata response.")
                 raise HTTPException(status_code=500, detail="No valid JSON block found in LLM metadata response.")
+
+            parsed = json.loads(match.group(1).strip())
+
+            # Type checks for parsed fields
+            metadata = parsed.get("metadata", {})
+            questions = parsed.get("questions", [])
+
+            if not isinstance(metadata.get("title"), str):
+                raise HTTPException(status_code=500, detail="Invalid LLM response: missing or invalid 'title'")
+            if not isinstance(metadata.get("type"), str):
+                raise HTTPException(status_code=500, detail="Invalid LLM response: missing or invalid 'type'")
+            if not isinstance(metadata.get("pages"), int):
+                raise HTTPException(status_code=500, detail="Invalid LLM response: missing or invalid 'pages'")
+            if not isinstance(metadata.get("created_date"), str):
+                raise HTTPException(status_code=500, detail="Invalid LLM response: missing or invalid 'created_date'")
+            if not isinstance(questions, list) or not all(isinstance(q, str) for q in questions):
+                raise HTTPException(status_code=500, detail="Invalid LLM response: 'questions' must be a list of strings")
+
+            return {
+                "metadata": metadata,
+                "questions": questions[:5]
+            }
     except Exception as e:
         logger.exception("Error in extract_metadata")
         raise HTTPException(status_code=500, detail=str(e))
