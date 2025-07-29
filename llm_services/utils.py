@@ -2,6 +2,8 @@ import os
 import boto3
 from dotenv import load_dotenv
 from fastapi import HTTPException
+import json
+import re
 
 load_dotenv()
 
@@ -30,3 +32,14 @@ def get_user_from_token(access_token: str) -> dict:
         return response
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired access token.")
+
+
+def extract_json_from_llm_response(text: str) -> dict:
+    # Simplistic: looks for first {...} block
+    match = re.search(r"\{[\s\S]*\}", text)
+    if not match:
+        raise HTTPException(status_code=500, detail="No JSON object found in LLM response.")
+    try:
+        return json.loads(match.group(0))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Invalid JSON format.")

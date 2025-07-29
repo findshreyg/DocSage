@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Dict
+from typing import List,Optional, Dict
 
 class DeleteConversationRequest(BaseModel):
     """Request schema for deleting a conversation."""
@@ -29,3 +29,26 @@ class AskResponse(BaseModel):
     reasoning: str
     source: Optional[Dict] = None
     verified: bool
+
+class AdaptiveExtractRequest(BaseModel):
+    file_hash: str
+
+class ClassificationResult(BaseModel):
+    document_type: str
+    description: Optional[str]
+    confidence: float
+
+class FieldDefinition(BaseModel):
+    field: str
+    description: Optional[str]
+    confidence: float
+
+class FieldValueWithConfidence(BaseModel):
+    value: Optional[str]
+    confidence: float
+
+class AdaptiveExtractResponse(BaseModel):
+    classification: ClassificationResult
+    fields_to_extract: List[FieldDefinition]
+    field_values: Dict[str, FieldValueWithConfidence]
+    raw_extracted_text: Optional[str] = None
