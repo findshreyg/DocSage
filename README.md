@@ -107,7 +107,7 @@ The project follows a **microservices architecture** with independent services t
 
 ## 📋 Prerequisites
 
-- Python 3.8+
+- Python 3.11+
 - AWS Account (for S3 storage and Cognito authentication)
 - Mistral AI API access
 
