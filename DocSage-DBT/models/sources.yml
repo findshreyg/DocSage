@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: idp
+    database: raw
+    schema: docsage
+    tables:
+      - name: raw_idp_conversation
+      - name: raw_idp_metadata

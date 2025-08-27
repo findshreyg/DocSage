@@ -1,0 +1,34 @@
+version: 2
+
+models:
+  - name: stg_idp_metadata
+    description: "One row per file (hash) with 5 suggested questions from DynamoDB metadata."
+    columns:
+      - name: hash
+        tests: [not_null]
+        description: "Primary key of file (DynamoDB hash)."
+      - name: user_id
+        tests: [not_null]
+      - name: question_1
+        tests: [not_null]  # if business rule requires all 5 present
+      - name: question_2
+        tests: [not_null]
+      - name: question_3
+        tests: [not_null]
+      - name: question_4
+        tests: [not_null]
+      - name: question_5
+        tests: [not_null]
+
+  - name: int_idp_file_feature_flags
+    description: "Per-file flag indicating presence of 5 suggested questions."
+    columns:
+      - name: hash
+        tests: [not_null]
+      - name: has_five_questions
+        tests:
+          - accepted_values:
+              values: [0, 1]
+
+  - name: mrt_idp_metadata_question_feature_usage
+    description: "Users using the questions feature and total files with 5Q."
