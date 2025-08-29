@@ -10,8 +10,8 @@ from boto3.dynamodb.conditions import Key, Attr
 import datetime
 import httpx
 import re
-from utils import extract_json_from_llm_response
-from schemas import (
+from .utils import extract_json_from_llm_response
+from .schemas import (
     AskRequest, AskResponse,AdaptiveExtractRequest, AdaptiveExtractResponse,
     ClassificationResult, FieldDefinition, FieldValueWithConfidence,
 )
@@ -316,9 +316,164 @@ async def process_question(payload: AskRequest, user: dict) -> AskResponse:
         logger.error(f"Error in process_question: {str(e)}")
         raise HTTPException(status_code=500, detail=f"process_question failed: {str(e)}")
 
+# async def extract_adaptive_from_document(payload: AdaptiveExtractRequest, user: dict) -> AdaptiveExtractResponse:
+#     try:
+#         # === Step 0: Load PDF from S3, convert if needed ===
+#         dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
+#         table = dynamodb.Table(METADATA_TABLE_NAME)
+#         user_id = user.get("sub") or user.get("Username")
+#         item = table.get_item(Key={"user_id": user_id, "hash": payload.file_hash}).get("Item")
+#         if not item:
+#             raise HTTPException(status_code=404, detail="File not found")
+#         s3_key = item.get("s3_key")
+#         converted_key = s3_key + ".converted.pdf"
+#         s3 = boto3.client("s3", region_name=AWS_REGION)
+#         # Check for PDF conversion
+#         try:
+#             s3.head_object(Bucket=S3_BUCKET_NAME, Key=converted_key)
+#             s3_key = converted_key
+#         except Exception:
+#             pass
+#         s3_url = s3.generate_presigned_url("get_object", Params={"Bucket": S3_BUCKET_NAME, "Key": s3_key}, ExpiresIn=300)
+
+#         async with httpx.AsyncClient(timeout=180) as client:
+#             # === Step 1: Dynamic, natural language classification ===
+#             step1_prompt = """
+# You're analyzing a document. Based solely on its content and layout, respond with:
+# 1. document_type: a clear label describing the document's actual purpose (e.g., "bank statement", "flight itinerary", "medical prescription", etc.).
+# 2. description: a 1-2 sentence summary of what this document represents and what data it likely contains.
+# 3. confidence: float 0.0–1.0, your certainty in this classification.
+
+# Output strictly in JSON as:
+# {
+#   "document_type": "...",
+#   "description": "...",
+#   "confidence": 0.0
+# }
+# """
+#             step1_response = await client.post(
+#                 MISTRAL_API_URL,
+#                 headers={"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"},
+#                 json={
+#                     "model": MISTRAL_LLM_MODEL,
+#                     "messages": [{"role": "user", "content": [{"type": "text", "text": step1_prompt}, {"type": "document_url", "document_url": s3_url}]}],
+#                     "response_format": {"type": "json_object"}
+#                 }
+#             )
+#             step1_content = step1_response.json()["choices"][0]["message"]["content"]
+#             classification = extract_json_from_llm_response(step1_content)
+
+#             # === Step 2: Context-rich field discovery with confidences ===
+#             full_classification_json = json.dumps(classification, indent=2)
+#             step2_prompt = f"""
+# You are analyzing a document classified as:
+# {full_classification_json}
+
+# Based on this document_type and description, list the most important fields (with precise names) that should be extracted from such a document.
+# For each field, provide:
+# - field: field name
+# - description: short description
+# - confidence: float (how important/relevant it is for this document type, 0.0-1.0)
+
+# Output in JSON as:
+# {{"fields_to_extract": [{{"field": "...", "description": "...", "confidence": 0.0}}]}}
+# """
+#             step2_response = await client.post(
+#                 MISTRAL_API_URL,
+#                 headers={"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"},
+#                 json={
+#                     "model": MISTRAL_LLM_MODEL,
+#                     "messages": [{"role": "user", "content": [{"type": "text", "text": step2_prompt}]}],
+#                     "response_format": {"type": "json_object"}
+#                 }
+#             )
+#             fields_obj = extract_json_from_llm_response(step2_response.json()["choices"][0]["message"]["content"])
+#             fields_to_extract = fields_obj.get("fields_to_extract", [])
+
+#             # === Step 3: Contextual field extraction with per-field confidence ===
+#             field_block_json = json.dumps(fields_to_extract, indent=2)
+#             step3_prompt = f"""
+# You are an expert data extractor for insurance loss run reports.
+# The document has been classified as:
+# {full_classification_json}
+
+# This document contains top-level policy information and a list of individual claims. Your task is to extract this information into a structured JSON object.
+
+# First, extract the overall policy information.
+# Next, iterate through EACH individual claim in the document and extract the following fields for each one:
+# {field_block_json}
+
+# Return a single JSON object. The JSON object must have a key "policy_information" for the main details, and a key "claims" which is a LIST of JSON objects, where each object represents a single claim.
+# Ensure all monetary values are returned as numbers only, without '$' symbols or commas.
+
+# Here is the required final format:
+# {{
+#   "policy_information": {{
+#     "policy_number": "...",
+#     "policy_period": "...",
+#     "insured_entity_name": "...",
+#     "insurance_carrier": "..."
+#   }},
+#   "claims": [
+#     {{
+#       "claim_number": "...",
+#       "claim_date": "...",
+#       "claim_status": "...",
+#       "claim_description": "...",
+#       "claimant_name": "...",
+#       "loss_amount": 1234.56,
+#       "expense_amount": 123.45,
+#       "total_paid_amount": 1358.01,
+#       "reserve_amount": 0
+#     }}
+#   ]
+# }}
+# """
+#             step3_response = await client.post(
+#                 MISTRAL_API_URL,
+#                 headers={"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"},
+#                 json={
+#                     "model": MISTRAL_LLM_MODEL,
+#                     "messages": [{"role": "user", "content": [{"type": "text", "text": step3_prompt}, {"type": "document_url", "document_url": s3_url}]}],
+#                     "response_format": {"type": "json_object"}
+#                 }
+#             )
+#             extraction_data = extract_json_from_llm_response(step3_response.json()["choices"][0]["message"]["content"])
+
+#             # Correctly handle the new structured response
+#             policy_info = extraction_data.get("policy_information", {})
+#             claims_list = extraction_data.get("claims", [])
+
+#             final_field_values = {}
+#             for key, value in policy_info.items():
+#                 final_field_values[key] = FieldValueWithConfidence(value=value, confidence=0.95)
+            
+#             final_field_values["claims"] = FieldValueWithConfidence(value=claims_list, confidence=0.95)
+
+#             return AdaptiveExtractResponse(
+#                 classification=ClassificationResult(
+#                     document_type=classification.get("document_type"),
+#                     description=classification.get("description"),
+#                     confidence=classification.get("confidence", 0.0)
+#                 ),
+#                 fields_to_extract=[
+#                     FieldDefinition(
+#                         field=f.get("field"),
+#                         description=f.get("description"),
+#                         confidence=f.get("confidence", 0.0)
+#                     ) for f in fields_to_extract
+#                 ],
+#                 field_values=final_field_values,
+#                 raw_extracted_text=step3_response.json()["choices"][0]["message"]["content"]
+#             )
+
+#     except Exception as e:
+#         logger.exception("Adaptive extraction failed")
+#         raise HTTPException(status_code=500, detail=str(e))
+
 async def extract_adaptive_from_document(payload: AdaptiveExtractRequest, user: dict) -> AdaptiveExtractResponse:
     try:
-        # === Step 0: Load PDF from S3, convert if needed ===
+        # === Step 0: AWS Logic ===
         dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
         table = dynamodb.Table(METADATA_TABLE_NAME)
         user_id = user.get("sub") or user.get("Username")
@@ -328,7 +483,6 @@ async def extract_adaptive_from_document(payload: AdaptiveExtractRequest, user: 
         s3_key = item.get("s3_key")
         converted_key = s3_key + ".converted.pdf"
         s3 = boto3.client("s3", region_name=AWS_REGION)
-        # Check for PDF conversion
         try:
             s3.head_object(Bucket=S3_BUCKET_NAME, Key=converted_key)
             s3_key = converted_key
@@ -337,7 +491,7 @@ async def extract_adaptive_from_document(payload: AdaptiveExtractRequest, user: 
         s3_url = s3.generate_presigned_url("get_object", Params={"Bucket": S3_BUCKET_NAME, "Key": s3_key}, ExpiresIn=300)
 
         async with httpx.AsyncClient(timeout=180) as client:
-            # === Step 1: Dynamic, natural language classification ===
+            # === Step 1: Classification ===
             step1_prompt = """
 You're analyzing a document. Based solely on its content and layout, respond with:
 1. document_type: a clear label describing the document's actual purpose (e.g., "bank statement", "flight itinerary", "medical prescription", etc.).
@@ -356,20 +510,26 @@ Output strictly in JSON as:
                 headers={"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"},
                 json={
                     "model": MISTRAL_LLM_MODEL,
-                    "messages": [{
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": step1_prompt},
-                            {"type": "document_url", "document_url": s3_url}
-                        ]
-                    }],
+                    "messages": [{"role": "user", "content": [{"type": "text", "text": step1_prompt}, {"type": "document_url", "document_url": s3_url}]}],
                     "response_format": {"type": "json_object"}
                 }
             )
+            
+            # --- START OF DEBUGGING CODE ---
+            response_data = step1_response.json()
+            print("--- FULL MISTRAL API RESPONSE (STEP 1) ---")
+            print(response_data)
+            print("------------------------------------------")
+
+            # Check for success before continuing
+            if "choices" not in response_data:
+                raise ValueError("Mistral API did not return 'choices'. The full response is printed above.")
+            # --- END OF DEBUGGING CODE ---
+            
             step1_content = step1_response.json()["choices"][0]["message"]["content"]
             classification = extract_json_from_llm_response(step1_content)
 
-            # === Step 2: Context-rich field discovery with confidences ===
+            # === Step 2: Field Discovery ===
             full_classification_json = json.dumps(classification, indent=2)
             step2_prompt = f"""
 You are analyzing a document classified as:
@@ -389,73 +549,104 @@ Output in JSON as:
                 headers={"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"},
                 json={
                     "model": MISTRAL_LLM_MODEL,
-                    "messages": [{
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": step2_prompt}
-                        ]
-                    }],
+                    "messages": [{"role": "user", "content": [{"type": "text", "text": step2_prompt}]}],
                     "response_format": {"type": "json_object"}
                 }
             )
+            # --- START OF NEW DEBUGGING CODE ---
+            response_data_2 = step2_response.json()
+            print("--- FULL MISTRAL API RESPONSE (STEP 2) ---")
+            print(response_data_2)
+            print("------------------------------------------")
+            if "choices" not in response_data_2:
+                raise ValueError("Mistral API did not return 'choices' in Step 2.")
+            # --- END OF NEW DEBUGGING CODE ---
             fields_obj = extract_json_from_llm_response(step2_response.json()["choices"][0]["message"]["content"])
             fields_to_extract = fields_obj.get("fields_to_extract", [])
-            field_names = [f["field"] for f in fields_to_extract]
 
-            # === Step 3: Contextual field extraction with per-field confidence ===
+            # === Step 3: Value Extraction ===
             field_block_json = json.dumps(fields_to_extract, indent=2)
             step3_prompt = f"""
-Document classification:
+You are an expert data extractor for insurance loss run reports.
+The document has been classified as:
 {full_classification_json}
 
-Fields to extract (with relevance confidence):
+This document contains top-level policy information and a list of individual claims. Your task is to extract this information into a structured JSON object.
+
+First, extract the overall policy information.
+Next, iterate through EACH individual claim in the document and extract the following fields for each one:
 {field_block_json}
 
-Extract values for each field from the document. Return JSON as:
+Return a single JSON object. The JSON object must have a key "policy_information" for the main details, and a key "claims" which is a LIST of JSON objects, where each object represents a single claim.
+Ensure all monetary values are returned as numbers only, without '$' symbols or commas.
+
+Here is the required final format:
 {{
-  "field_name": {{"value": "...", "confidence": 0.0 }},
-  ...
+  "policy_information": {{
+    "policy_number": "...",
+    "policy_period": "...",
+    "insured_entity_name": "...",
+    "insurance_carrier": "..."
+  }},
+  "claims": [
+    {{
+      "claim_number": "...",
+      "claim_date": "...",
+      "claim_status": "...",
+      "claim_description": "...",
+      "claimant_name": "...",
+      "loss_amount": 1234.56,
+      "expense_amount": 123.45,
+      "total_paid_amount": 1358.01,
+      "reserve_amount": 0
+    }}
+  ]
 }}
-For each, confidence reflects your certainty in that field value for this particular document (0=not at all sure, 1=very sure).
 """
             step3_response = await client.post(
                 MISTRAL_API_URL,
                 headers={"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"},
                 json={
                     "model": MISTRAL_LLM_MODEL,
-                    "messages": [{
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": step3_prompt},
-                            {"type": "document_url", "document_url": s3_url}
-                        ]
-                    }],
+                    "messages": [{"role": "user", "content": [{"type": "text", "text": step3_prompt}, {"type": "document_url", "document_url": s3_url}]}],
                     "response_format": {"type": "json_object"}
                 }
             )
+            # --- START OF NEW DEBUGGING CODE ---
+            response_data_3 = step3_response.json()
+            print("--- FULL MISTRAL API RESPONSE (STEP 3) ---")
+            print(response_data_3)
+            print("------------------------------------------")
+            if "choices" not in response_data_3:
+                raise ValueError("Mistral API did not return 'choices' in Step 3.")
+            # --- END OF NEW DEBUGGING CODE ---
             extraction_data = extract_json_from_llm_response(step3_response.json()["choices"][0]["message"]["content"])
+            
+            # Correctly handle the new structured response
+            policy_info = extraction_data.get("policy_information", {})
+            claims_list = extraction_data.get("claims", [])
+            final_field_values = {}
+            for key, value in policy_info.items():
+                final_field_values[key] = FieldValueWithConfidence(value=value, confidence=0.95)
+            final_field_values["claims"] = FieldValueWithConfidence(value=claims_list, confidence=0.95)
 
-        return AdaptiveExtractResponse(
-            classification=ClassificationResult(
-                document_type=classification.get("document_type"),
-                description=classification.get("description"),
-                confidence=classification.get("confidence", 0.0)
-            ),
-            fields_to_extract=[
-                FieldDefinition(
-                    field=f.get("field"),
-                    description=f.get("description"),
-                    confidence=f.get("confidence", 0.0)
-                ) for f in fields_to_extract
-            ],
-            field_values={
-                k: FieldValueWithConfidence(
-                    value=v.get("value"),
-                    confidence=v.get("confidence", 0.0)
-                ) for k, v in extraction_data.items()
-            },
-            raw_extracted_text=step3_response.json()["choices"][0]["message"]["content"]
-        )
+            return AdaptiveExtractResponse(
+                classification=ClassificationResult(
+                    document_type=classification.get("document_type"),
+                    description=classification.get("description"),
+                    confidence=classification.get("confidence", 0.0)
+                ),
+                fields_to_extract=[
+                    FieldDefinition(
+                        field=f.get("field"),
+                        description=f.get("description"),
+                        confidence=f.get("confidence", 0.0)
+                    ) for f in fields_to_extract
+                ],
+                field_values=final_field_values,
+                raw_extracted_text=step3_response.json()["choices"][0]["message"]["content"]
+            )
+
     except Exception as e:
         logger.exception("Adaptive extraction failed")
         raise HTTPException(status_code=500, detail=str(e))

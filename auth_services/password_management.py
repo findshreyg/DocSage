@@ -4,7 +4,7 @@ import logging
 from fastapi import HTTPException
 from botocore.exceptions import ClientError, BotoCoreError
 from dotenv import load_dotenv
-from utils import get_secret_hash
+from .utils import get_secret_hash
 
 load_dotenv()
 

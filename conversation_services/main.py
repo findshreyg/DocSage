@@ -1,36 +1,29 @@
-import os
 import logging
-from fastapi import HTTPException, Request, FastAPI, Header, status
+from fastapi import FastAPI, HTTPException, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
 
-from dotenv import load_dotenv
-
-from utils import get_user_from_token
-from schemas import (
+# Correct relative imports
+from .utils import get_user_from_token
+from .schemas import (
     FindConversationRequest,
     DeleteConversationRequest,
     DeleteAllConversationsRequest,
-    GetAllConversationsPerUserPerFile,
 )
-from conversation_handler import (
+from .conversation_handler import (
     find_conversation,
     get_all_conversations_by_file,
     delete_conversation,
     delete_all_conversations,
 )
 
-load_dotenv()
-
 app = FastAPI()
 
-# Logger setup
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For demonstration, allow all. Adjust as needed for prod!
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -38,31 +31,10 @@ app.add_middleware(
 
 @app.get("/conversation/health")
 def check_health() -> dict:
-    """
-    Health check endpoint for the conversation service.
-    Returns:
-        dict: Health status.
-    """
     return {"health": "All Good"}
 
 @app.get("/conversation/get-file-conversations")
-def get_conversations(
-    file_hash: str,
-    authorization: str = Header(None)
-) -> dict:
-    """
-    Retrieve all conversation records for the authenticated user and file.
-
-    Args:
-        file_hash (str): The hash of the file.
-        authorization (str): Bearer token in the Authorization header.
-
-    Returns:
-        dict: List of conversations.
-
-    Raises:
-        HTTPException: If authorization is missing or fetch fails.
-    """
+def get_conversations(file_hash: str, authorization: str = Header(None)) -> dict:
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header missing")
     try:
@@ -71,8 +43,6 @@ def get_conversations(
         logger.info(f"Resolved user: {user.get('Username')}.")
         results = get_all_conversations_by_file(user["Username"], file_hash)
         return {"conversations": results, "message": "Conversations retrieved successfully."}
-    except HTTPException as e:
-        raise e
     except Exception as e:
         logger.exception("Unexpected error fetching conversations.")
         raise HTTPException(
@@ -81,23 +51,7 @@ def get_conversations(
         )
 
 @app.delete("/conversation/delete-conversation")
-def delete_conversation_endpoint(
-    payload: DeleteConversationRequest,
-    request: Request
-) -> dict:
-    """
-    Delete a specific conversation for a file hash and question.
-
-    Args:
-        payload (DeleteConversationRequest): Contains file hash and question.
-        request (Request): HTTP request object.
-
-    Returns:
-        dict: Deletion message.
-
-    Raises:
-        HTTPException: For errors and unauthorized use.
-    """
+def delete_conversation_endpoint(payload: DeleteConversationRequest, request: Request) -> dict:
     access_token = request.headers.get("Authorization")
     if not access_token:
         raise HTTPException(status_code=401, detail="Authorization header missing")
@@ -108,30 +62,12 @@ def delete_conversation_endpoint(
         if not success:
             raise HTTPException(status_code=404, detail=message)
         return {"message": message}
-    except HTTPException as e:
-        raise e
     except Exception as e:
         logger.exception("Unexpected error deleting conversation.")
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 @app.delete("/conversation/delete-all-conversations")
-def delete_all_conversation_endpoint(
-    payload: DeleteAllConversationsRequest,
-    request: Request
-) -> dict:
-    """
-    Delete all conversations for a specific file hash for the user.
-
-    Args:
-        payload (DeleteAllConversationsRequest): Contains file hash.
-        request (Request): HTTP request.
-
-    Returns:
-        dict: Deletion message.
-
-    Raises:
-        HTTPException: For errors and unauthorized access.
-    """
+def delete_all_conversation_endpoint(payload: DeleteAllConversationsRequest, request: Request) -> dict:
     access_token = request.headers.get("Authorization")
     if not access_token:
         raise HTTPException(status_code=401, detail="Authorization header missing")
@@ -142,30 +78,12 @@ def delete_all_conversation_endpoint(
         if not success:
             raise HTTPException(status_code=404, detail=message)
         return {"message": message}
-    except HTTPException as e:
-        raise e
     except Exception as e:
         logger.exception("Unexpected error deleting all conversations.")
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 @app.post("/conversation/find-conversation")
-def find_conversation_endpoint(
-    payload: FindConversationRequest,
-    request: Request
-) -> dict:
-    """
-    Find a specific conversation for a file hash and question.
-
-    Args:
-        payload (FindConversationRequest): Contains file hash and question.
-        request (Request): HTTP request.
-
-    Returns:
-        dict: The found conversation and a message.
-
-    Raises:
-        HTTPException: If conversation not found or on auth error.
-    """
+def find_conversation_endpoint(payload: FindConversationRequest, request: Request) -> dict:
     access_token = request.headers.get("Authorization")
     if not access_token:
         raise HTTPException(status_code=401, detail="Authorization header missing")
@@ -176,9 +94,6 @@ def find_conversation_endpoint(
         if not result:
             raise HTTPException(status_code=404, detail="Conversation not found")
         return {"conversation_services": result, "message": "Conversation found successfully."}
-    except HTTPException as e:
-        raise e
     except Exception as e:
         logger.exception("Unexpected error finding conversation.")
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
-

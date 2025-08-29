@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import List,Optional, Dict
+from typing import Any
 
 class DeleteConversationRequest(BaseModel):
     """Request schema for deleting a conversation."""
@@ -44,7 +45,7 @@ class FieldDefinition(BaseModel):
     confidence: float
 
 class FieldValueWithConfidence(BaseModel):
-    value: Optional[str]
+    value: Optional[Any]
     confidence: float
 
 class AdaptiveExtractResponse(BaseModel):

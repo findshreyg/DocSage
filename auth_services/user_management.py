@@ -4,7 +4,7 @@ import logging
 from fastapi import HTTPException, status
 from botocore.exceptions import ClientError, BotoCoreError
 from dotenv import load_dotenv
-from utils import get_secret_hash
+from .utils import get_secret_hash
 from boto3.dynamodb.conditions import Key, Attr
 from typing import Optional, Dict, Any
 

@@ -7,7 +7,7 @@ from boto3.dynamodb.conditions import Key, Attr
 from botocore.client import Config
 from botocore.exceptions import ClientError
 from fastapi import UploadFile, HTTPException
-from utils import extract_metadata, save_metadata
+from .utils import extract_metadata, save_metadata
 
 load_dotenv()
 

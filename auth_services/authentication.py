@@ -4,7 +4,7 @@ import logging
 from fastapi import HTTPException
 from botocore.exceptions import ClientError, BotoCoreError
 from dotenv import load_dotenv
-from utils import get_secret_hash
+from .utils import get_secret_hash
 
 load_dotenv()
 
@@ -70,6 +70,67 @@ def sign_up(email: str, password: str, name: str) -> dict:
         logging.exception("Unknown error in sign_up")
         raise HTTPException(status_code=500, detail="Unexpected error during signup.")
 
+# def login(email: str, password: str) -> dict:
+#     """
+#     Authenticate user against Cognito.
+
+#     Args:
+#         email (str): Email address.
+#         password (str): Password.
+
+#     Returns:
+#         dict: Tokens and basic user info.
+
+#     Raises:
+#         HTTPException: For login or AWS errors.
+#     """
+#     if not email or not password:
+#         raise HTTPException(status_code=400, detail="Email and password required.")
+
+#     try:
+#         auth_response = client.initiate_auth(
+#             ClientId=COGNITO_CLIENT_ID,
+#             AuthFlow='USER_PASSWORD_AUTH',
+#             AuthParameters={
+#                 'USERNAME': email,
+#                 'PASSWORD': password,
+#                 'SECRET_HASH': get_secret_hash(email)
+#             }
+#         )
+#         tokens = auth_response['AuthenticationResult']
+#         user_response = client.admin_get_user(
+#             UserPoolId=COGNITO_USER_POOL_ID,
+#             Username=email
+#         )
+#         name_attr = next(
+#             (attr['Value'] for attr in user_response['UserAttributes'] if attr['Name'] == 'name'),
+#             None
+#         )
+#         return {
+#             "access_token": tokens.get("AccessToken"),
+#             "id_token": tokens.get("IdToken"),
+#             "refresh_token": tokens.get("RefreshToken"),
+#             "name": name_attr,
+#             "email": email
+#         }
+#     except ClientError as e:
+#         error_code = e.response['Error']['Code']
+#         if error_code == 'NotAuthorizedException':
+#             raise HTTPException(status_code=401, detail="Invalid email or password.")
+#         elif error_code == 'UserNotFoundException':
+#             raise HTTPException(status_code=404, detail="User does not exist.")
+#         elif error_code == 'PasswordResetRequiredException':
+#             raise HTTPException(status_code=403, detail="Password reset required. Please reset your password.")
+#         else:
+#             logging.error(f"ClientError in login: {e}")
+#             raise HTTPException(status_code=400, detail="Login failed. Please try again.")
+#     except BotoCoreError:
+#         logging.exception("BotoCoreError in login")
+#         raise HTTPException(status_code=500, detail="Internal server error.")
+#     except Exception as e:
+#         logging.exception("Unknown error in login")
+#         raise HTTPException(status_code=500, detail="Unexpected error during login.")
+
 def login(email: str, password: str) -> dict:
     """
     Authenticate user against Cognito.
@@ -84,10 +145,14 @@ def login(email: str, password: str) -> dict:
     Raises:
         HTTPException: For login or AWS errors.
     """
+    print("--- AUTH SERVICE: Login function started.") # BREADCRUMB 1
+    
     if not email or not password:
         raise HTTPException(status_code=400, detail="Email and password required.")
 
     try:
+        print("--- AUTH SERVICE: Sending authentication request to Cognito...") # BREADCRUMB 2
+        
         auth_response = client.initiate_auth(
             ClientId=COGNITO_CLIENT_ID,
             AuthFlow='USER_PASSWORD_AUTH',
@@ -97,11 +162,20 @@ def login(email: str, password: str) -> dict:
                 'SECRET_HASH': get_secret_hash(email)
             }
         )
+        
+        print("--- AUTH SERVICE: Received successful response from Cognito.") # BREADCRUMB 3
+        
         tokens = auth_response['AuthenticationResult']
+        
+        print("--- AUTH SERVICE: Getting user details from Cognito...") # BREADCRUMB 4
+        
         user_response = client.admin_get_user(
             UserPoolId=COGNITO_USER_POOL_ID,
             Username=email
         )
+        
+        print("--- AUTH SERVICE: Successfully got user details.") # BREADCRUMB 5
+        
         name_attr = next(
             (attr['Value'] for attr in user_response['UserAttributes'] if attr['Name'] == 'name'),
             None
@@ -115,6 +189,7 @@ def login(email: str, password: str) -> dict:
         }
     except ClientError as e:
         error_code = e.response['Error']['Code']
+        print(f"--- AUTH SERVICE: Cognito ClientError - {error_code}") # BREADCRUMB ERROR
         if error_code == 'NotAuthorizedException':
             raise HTTPException(status_code=401, detail="Invalid email or password.")
         elif error_code == 'UserNotFoundException':
@@ -125,9 +200,11 @@ def login(email: str, password: str) -> dict:
             logging.error(f"ClientError in login: {e}")
             raise HTTPException(status_code=400, detail="Login failed. Please try again.")
     except BotoCoreError:
+        print("--- AUTH SERVICE: BotoCoreError occurred.") # BREADCRUMB ERROR
         logging.exception("BotoCoreError in login")
         raise HTTPException(status_code=500, detail="Internal server error.")
     except Exception as e:
+        print(f"--- AUTH SERVICE: An unexpected error occurred: {e}") # BREADCRUMB ERROR
         logging.exception("Unknown error in login")
         raise HTTPException(status_code=500, detail="Unexpected error during login.")
 
