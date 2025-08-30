@@ -10,6 +10,7 @@ from boto3.dynamodb.conditions import Key, Attr
 import datetime
 import httpx
 import re
+import time
 from .utils import extract_json_from_llm_response
 from .schemas import (
     AskRequest, AskResponse,AdaptiveExtractRequest, AdaptiveExtractResponse,
@@ -17,6 +18,17 @@ from .schemas import (
 )
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+
+# Helper function to convert floats to Decimals for DynamoDB
+def floats_to_decimals(obj):
+    if isinstance(obj, list):
+        return [floats_to_decimals(i) for i in obj]
+    elif isinstance(obj, dict):
+        return {k: floats_to_decimals(v) for k, v in obj.items()}
+    elif isinstance(obj, float):
+        # Using str() is important for precision
+        return Decimal(str(obj))
+    return obj
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -471,182 +483,123 @@ async def process_question(payload: AskRequest, user: dict) -> AskResponse:
 #         logger.exception("Adaptive extraction failed")
 #         raise HTTPException(status_code=500, detail=str(e))
 
-async def extract_adaptive_from_document(payload: AdaptiveExtractRequest, user: dict) -> AdaptiveExtractResponse:
+# This is the new, experimental single-call function and adding caching 
+async def extract_adaptive_from_document(payload: AdaptiveExtractRequest, user: dict) -> dict:
     try:
-        # === Step 0: AWS Logic ===
+        # === Step 0: Connect to DynamoDB and get the item ===
         dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
         table = dynamodb.Table(METADATA_TABLE_NAME)
         user_id = user.get("sub") or user.get("Username")
-        item = table.get_item(Key={"user_id": user_id, "hash": payload.file_hash}).get("Item")
+        item = None
+        for i in range(5):  # Try up to 5 times
+            print(f"--- Attempt {i+1} to get item from DynamoDB...")
+            result = table.get_item(Key={"user_id": user_id, "hash": payload.file_hash})
+            if "Item" in result:
+                item = result["Item"]
+                print("--- Successfully found item in DynamoDB.")
+                break  # Exit the loop if we found it
+            print("--- Item not found, waiting 2 seconds before retry...")
+            time.sleep(2)  # Wait for 2 seconds
+
         if not item:
-            raise HTTPException(status_code=404, detail="File not found")
+            # If we still haven't found it after all retries, then fail.
+            logger.error("Failed to find item in DynamoDB after multiple retries.")
+            raise HTTPException(status_code=404, detail="File not found in database after retries.")
+
+        # === THE CACHING LOGIC (FAST PATH) ===
+        if "extracted_data" in item:
+            print("--- CACHE HIT: Returning saved data from DynamoDB. ---")
+            return item["extracted_data"]
+
+        # === THE SLOW PATH (if no cached data is found) ===
+        print("--- CACHE MISS: Performing full AI extraction. ---")
         s3_key = item.get("s3_key")
-        converted_key = s3_key + ".converted.pdf"
         s3 = boto3.client("s3", region_name=AWS_REGION)
-        try:
-            s3.head_object(Bucket=S3_BUCKET_NAME, Key=converted_key)
-            s3_key = converted_key
-        except Exception:
-            pass
         s3_url = s3.generate_presigned_url("get_object", Params={"Bucket": S3_BUCKET_NAME, "Key": s3_key}, ExpiresIn=300)
 
-        async with httpx.AsyncClient(timeout=180) as client:
-            # === Step 1: Classification ===
-            step1_prompt = """
-You're analyzing a document. Based solely on its content and layout, respond with:
-1. document_type: a clear label describing the document's actual purpose (e.g., "bank statement", "flight itinerary", "medical prescription", etc.).
-2. description: a 1-2 sentence summary of what this document represents and what data it likely contains.
-3. confidence: float 0.0–1.0, your certainty in this classification.
+        # The single, optimized prompt
+        optimized_prompt = """
+You are an expert data extraction engine. Your task is to perform a complete analysis of the provided document in a single step.
 
-Output strictly in JSON as:
+1.  First, classify the document. Determine its "document_type" (e.g., "insurance loss run report") and provide a short "description".
+2.  Second, based on that classification, determine the most relevant fields to extract.
+3.  Third, extract the values for those fields from the document. The document may contain top-level information and a list of items (like claims).
+
+Your final output MUST be a single JSON object with a key "policy_information" for top-level details and a key "claims" which MUST be a LIST of JSON objects.
+Ensure all monetary values are returned as numbers without currency symbols.
+
+Example format:
 {
-  "document_type": "...",
-  "description": "...",
-  "confidence": 0.0
+  "policy_information": { "policy_number": "...", ... },
+  "claims": [ { "claim_number": "...", ... } ]
 }
 """
-            step1_response = await client.post(
+        async with httpx.AsyncClient(timeout=180) as client:
+            response = await client.post(
                 MISTRAL_API_URL,
                 headers={"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"},
                 json={
                     "model": MISTRAL_LLM_MODEL,
-                    "messages": [{"role": "user", "content": [{"type": "text", "text": step1_prompt}, {"type": "document_url", "document_url": s3_url}]}],
+                    "messages": [{"role": "user", "content": [{"type": "text", "text": optimized_prompt}, {"type": "document_url", "document_url": s3_url}]}],
                     "response_format": {"type": "json_object"}
                 }
             )
-            
-            # --- START OF DEBUGGING CODE ---
-            response_data = step1_response.json()
-            print("--- FULL MISTRAL API RESPONSE (STEP 1) ---")
-            print(response_data)
-            print("------------------------------------------")
+        
+        extraction_data = extract_json_from_llm_response(response.json()["choices"][0]["message"]["content"])
+        
+        policy_info = extraction_data.get("policy_information", {})
+        claims_list = extraction_data.get("claims", [])
+        final_field_values = {}
+        for key, value in policy_info.items():
+            final_field_values[key] = {"value": value, "confidence": 0.9}
+        final_field_values["claims"] = {"value": claims_list, "confidence": 0.9}
 
-            # Check for success before continuing
-            if "choices" not in response_data:
-                raise ValueError("Mistral API did not return 'choices'. The full response is printed above.")
-            # --- END OF DEBUGGING CODE ---
-            
-            step1_content = step1_response.json()["choices"][0]["message"]["content"]
-            classification = extract_json_from_llm_response(step1_content)
-
-            # === Step 2: Field Discovery ===
-            full_classification_json = json.dumps(classification, indent=2)
-            step2_prompt = f"""
-You are analyzing a document classified as:
-{full_classification_json}
-
-Based on this document_type and description, list the most important fields (with precise names) that should be extracted from such a document.
-For each field, provide:
-- field: field name
-- description: short description
-- confidence: float (how important/relevant it is for this document type, 0.0-1.0)
-
-Output in JSON as:
-{{"fields_to_extract": [{{"field": "...", "description": "...", "confidence": 0.0}}]}}
-"""
-            step2_response = await client.post(
-                MISTRAL_API_URL,
-                headers={"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"},
-                json={
-                    "model": MISTRAL_LLM_MODEL,
-                    "messages": [{"role": "user", "content": [{"type": "text", "text": step2_prompt}]}],
-                    "response_format": {"type": "json_object"}
-                }
+        # === SAVE THE NEW RESULT TO THE DATABASE ===
+        try:
+            print("--- SAVING to DynamoDB for next time... ---")
+            # table.update_item(
+            #     Key={
+            #         'user_id': user_id,
+            #         'hash': payload.file_hash
+            #     },
+            #     UpdateExpression="SET extracted_data = :data",
+            #     ExpressionAttributeValues={
+            #         # Use the helper function to convert the data before saving
+            #         ':data': floats_to_decimals(final_field_values)
+            #     }
+            # )
+            table.update_item(
+                Key={'user_id': user_id, 'hash': payload.file_hash},
+                UpdateExpression="SET metadata.extracted_adaptive_data = :data",
+                ExpressionAttributeValues={':data': floats_to_decimals(final_field_values)}
             )
-            # --- START OF NEW DEBUGGING CODE ---
-            response_data_2 = step2_response.json()
-            print("--- FULL MISTRAL API RESPONSE (STEP 2) ---")
-            print(response_data_2)
-            print("------------------------------------------")
-            if "choices" not in response_data_2:
-                raise ValueError("Mistral API did not return 'choices' in Step 2.")
-            # --- END OF NEW DEBUGGING CODE ---
-            fields_obj = extract_json_from_llm_response(step2_response.json()["choices"][0]["message"]["content"])
-            fields_to_extract = fields_obj.get("fields_to_extract", [])
+        except Exception as db_error:
+            logger.error(f"Could not save extracted data to DynamoDB: {db_error}")
+            # Temporarily raise an error to make it visible
+            raise HTTPException(status_code=500, detail=f"DB_SAVE_FAILED: {str(db_error)}")
 
-            # === Step 3: Value Extraction ===
-            field_block_json = json.dumps(fields_to_extract, indent=2)
-            step3_prompt = f"""
-You are an expert data extractor for insurance loss run reports.
-The document has been classified as:
-{full_classification_json}
-
-This document contains top-level policy information and a list of individual claims. Your task is to extract this information into a structured JSON object.
-
-First, extract the overall policy information.
-Next, iterate through EACH individual claim in the document and extract the following fields for each one:
-{field_block_json}
-
-Return a single JSON object. The JSON object must have a key "policy_information" for the main details, and a key "claims" which is a LIST of JSON objects, where each object represents a single claim.
-Ensure all monetary values are returned as numbers only, without '$' symbols or commas.
-
-Here is the required final format:
-{{
-  "policy_information": {{
-    "policy_number": "...",
-    "policy_period": "...",
-    "insured_entity_name": "...",
-    "insurance_carrier": "..."
-  }},
-  "claims": [
-    {{
-      "claim_number": "...",
-      "claim_date": "...",
-      "claim_status": "...",
-      "claim_description": "...",
-      "claimant_name": "...",
-      "loss_amount": 1234.56,
-      "expense_amount": 123.45,
-      "total_paid_amount": 1358.01,
-      "reserve_amount": 0
-    }}
-  ]
-}}
-"""
-            step3_response = await client.post(
-                MISTRAL_API_URL,
-                headers={"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"},
-                json={
-                    "model": MISTRAL_LLM_MODEL,
-                    "messages": [{"role": "user", "content": [{"type": "text", "text": step3_prompt}, {"type": "document_url", "document_url": s3_url}]}],
-                    "response_format": {"type": "json_object"}
-                }
-            )
-            # --- START OF NEW DEBUGGING CODE ---
-            response_data_3 = step3_response.json()
-            print("--- FULL MISTRAL API RESPONSE (STEP 3) ---")
-            print(response_data_3)
-            print("------------------------------------------")
-            if "choices" not in response_data_3:
-                raise ValueError("Mistral API did not return 'choices' in Step 3.")
-            # --- END OF NEW DEBUGGING CODE ---
-            extraction_data = extract_json_from_llm_response(step3_response.json()["choices"][0]["message"]["content"])
-            
-            # Correctly handle the new structured response
-            policy_info = extraction_data.get("policy_information", {})
-            claims_list = extraction_data.get("claims", [])
-            final_field_values = {}
-            for key, value in policy_info.items():
-                final_field_values[key] = FieldValueWithConfidence(value=value, confidence=0.95)
-            final_field_values["claims"] = FieldValueWithConfidence(value=claims_list, confidence=0.95)
-
-            return AdaptiveExtractResponse(
-                classification=ClassificationResult(
-                    document_type=classification.get("document_type"),
-                    description=classification.get("description"),
-                    confidence=classification.get("confidence", 0.0)
-                ),
-                fields_to_extract=[
-                    FieldDefinition(
-                        field=f.get("field"),
-                        description=f.get("description"),
-                        confidence=f.get("confidence", 0.0)
-                    ) for f in fields_to_extract
-                ],
-                field_values=final_field_values,
-                raw_extracted_text=step3_response.json()["choices"][0]["message"]["content"]
-            )
+        return final_field_values
 
     except Exception as e:
-        logger.exception("Adaptive extraction failed")
+        logger.exception("Optimized adaptive extraction failed")
         raise HTTPException(status_code=500, detail=str(e))
+    
+# new function to llm_services/mistral_llm.py
+def get_cached_extraction(file_hash: str, user: dict):
+    try:
+        dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
+        table = dynamodb.Table(METADATA_TABLE_NAME)
+        user_id = user.get("sub") or user.get("Username")
+        item = table.get_item(Key={"user_id": user_id, "hash": file_hash}).get("Item")
+
+        # CORRECTED PATH: Look inside 'metadata' for 'extracted_adaptive_data'
+        if item and "metadata" in item and "extracted_adaptive_data" in item["metadata"]:
+            # If the data exists, return it
+            return item["metadata"]["extracted_adaptive_data"]
+        
+        # If data is not ready yet, tell the frontend it's still processing
+        return {"status": "processing"}
+
+    except Exception as e:
+        logger.error(f"Failed to get cached data: {e}")
+        raise HTTPException(status_code=500, detail="Could not retrieve extraction data.")

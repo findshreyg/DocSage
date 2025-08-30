@@ -20,7 +20,6 @@ def health():
 
 @app.post("/file/upload", status_code=status.HTTP_201_CREATED)
 async def upload_file(file: UploadFile = File(...), authorization: str = Header(None)):
-    # ... (rest of your original upload_file function)
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header missing.")
     access_token = authorization.replace("Bearer ", "").strip()
@@ -31,7 +30,8 @@ async def upload_file(file: UploadFile = File(...), authorization: str = Header(
     if not file:
         raise HTTPException(status_code=400, detail="No file provided.")
     try:
-        result = await handle_upload(file, user)
+        # THIS IS THE ONLY LINE THAT CHANGES
+        result = await handle_upload(file, user, authorization)
         return result
     except HTTPException:
         raise

@@ -2,12 +2,14 @@ import hashlib
 import boto3
 import logging
 import os
+import httpx
 from dotenv import load_dotenv
 from boto3.dynamodb.conditions import Key, Attr
 from botocore.client import Config
 from botocore.exceptions import ClientError
 from fastapi import UploadFile, HTTPException
 from .utils import extract_metadata, save_metadata
+from datetime import datetime
 
 load_dotenv()
 
@@ -149,49 +151,79 @@ def delete_user_file(user_id: str, file_hash: str):
         logger.exception(f"Unexpected error deleting file: {e}")
         raise HTTPException(status_code=500, detail="Unexpected error during file deletion.")
 
-async def handle_upload(file: UploadFile, user: dict) -> dict:
+# 1. ADD THIS IMPORT AT THE TOP OF YOUR file_handler.py FILE
+import httpx
+# ... your other imports ...
+
+
+# 2. REPLACE YOUR ENTIRE HANDLE_UPLOAD FUNCTION WITH THIS
+# In file_services/file_handler.py
+
+async def handle_upload(file: UploadFile, user: dict, authorization: str) -> dict:
     """
-    Handle the file upload, deduplication, metadata extraction, and DynamoDB/S3 save.
-    Args:
-        file (UploadFile): The uploaded file object.
-        user (dict): The authenticated user profile.
-    Returns:
-        dict: Upload result.
+    Handle file upload, run BOTH metadata extractions, save, and trigger adaptive extraction.
     """
     try:
         logger.info(f"User: {user.get('Username')} uploading file: {file.filename}")
         content = await file.read()
         file_hash = hashlib.sha256(content).hexdigest()
-        # Check deduplication
+
         exists = metadata_table.get_item(Key={"user_id": user["Username"], "hash": file_hash})
-        if exists and "Item" in exists:
+        if "Item" in exists:
             logger.info("Duplicate file detected. Skipping upload.")
             return {"message": "File already uploaded.", "s3_key": exists["Item"]["s3_key"]}
+
         s3_key = f"{user['Username']}/{file.filename}"
-        file.file.seek(0)
+        await file.seek(0)
+        s3_client.put_object(Bucket=S3_BUCKET_NAME, Key=s3_key, Body=file.file)
+
+        # --- STEP 1: Run the original metadata extraction safely ---
+        initial_metadata = {}
         try:
-            s3_client.put_object(Bucket=S3_BUCKET_NAME, Key=s3_key, Body=file.file)
+            print("--- Running initial metadata extraction... ---")
+            # This is the original function from your teammate's code
+            initial_metadata = await extract_metadata(file.filename, s3_key)
         except Exception as e:
-            logger.error(f"S3 upload failed: {e}")
-            raise HTTPException(status_code=500, detail="Failed to upload file to storage.")
-        # Extract metadata with LLM, then save it
+            print(f"Warning: Initial metadata extraction failed, creating basic metadata. Error: {e}")
+            initial_metadata = {"title": file.filename, "type": "Unknown", "questions": []}
+        
+        # --- STEP 2: Save this initial metadata to the database ---
         try:
-            extracted_metadata = await extract_metadata(file.filename, s3_key)
+            print(f"--- Saving initial metadata for hash {file_hash} to DynamoDB... ---")
+            item_to_save = {
+                'user_id': user["Username"],
+                'hash': file_hash,
+                'filename': file.filename,
+                's3_key': s3_key,
+                'upload_timestamp': datetime.utcnow().isoformat() + "Z",
+                'status': 'processing',
+                'metadata': initial_metadata # Save the metadata we just got
+            }
+            metadata_table.put_item(Item=item_to_save)
+            print("--- Initial metadata saved. ---")
         except Exception as e:
-            logger.error(f"Metadata extraction failed: {e}")
-            raise HTTPException(status_code=500, detail="Metadata extraction failed.")
+            logger.error(f"Error saving initial metadata: {e}")
+            raise HTTPException(status_code=500, detail="Failed to save file metadata.")
+
+        # --- STEP 3: Trigger the full adaptive extraction ---
+        print(f"--- Triggering full adaptive extraction for hash {file_hash}... ---")
         try:
-            save_metadata(user["Username"], file_hash, file.filename, s3_key, extracted_metadata)
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                llm_response = await client.post(
+                    "http://localhost:8003/llm/extract-adaptive",
+                    headers={"Authorization": authorization},
+                    json={"file_hash": file_hash}
+                )
+                if llm_response.status_code == 200:
+                    print("--- Full extraction completed and saved successfully by LLM service. ---")
+                else:
+                    print(f"Warning: Full extraction task failed. Status: {llm_response.status_code}. Body: {llm_response.text}")
         except Exception as e:
-            logger.error(f"Error saving metadata: {e}")
-            raise HTTPException(status_code=500, detail="Failed to save metadata.")
+            print(f"--- Warning: Could not trigger LLM service for full extraction: {e} ---")
+
         logger.info(f"Upload complete for {file.filename}")
-        return {
-            "message": "Upload successful",
-            "s3_key": s3_key,
-            "file_hash": file_hash,
-            "result": extracted_metadata
-        }
+        return { "message": "Upload successful", "file_hash": file_hash }
+        
     except Exception as e:
         logger.exception(f"Unexpected error during upload: {e}")
         raise HTTPException(status_code=500, detail="Internal server error during upload.")

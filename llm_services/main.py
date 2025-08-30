@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Header, status
 from fastapi.middleware.cors import CORSMiddleware
 
 # Correct relative imports
-from .mistral_llm import process_question, extract_adaptive_from_document
+from .mistral_llm import process_question, extract_adaptive_from_document, get_cached_extraction
 from .schemas import AskRequest, AskResponse, AdaptiveExtractRequest, AdaptiveExtractResponse
 from .utils import get_user_from_token
 
@@ -45,3 +45,11 @@ async def extract_adaptive(payload: AdaptiveExtractRequest, authorization: str =
         raise HTTPException(status_code=401, detail="Authorization header missing.")
     user = get_user_from_token(authorization.replace("Bearer ", "").strip())
     return await extract_adaptive_from_document(payload, user)
+
+@app.get("/llm/get-extraction/{file_hash}")
+def get_extraction_result(file_hash: str, authorization: str = Header(None)):
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization header missing.")
+
+    user = get_user_from_token(authorization.replace("Bearer ", "").strip())
+    return get_cached_extraction(file_hash, user)
