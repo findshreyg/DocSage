@@ -1,0 +1,1194 @@
+{
+  "info": {
+    "name": "DocSage Complete Testing Collection - Updated",
+    "description": "Complete API testing collection for all DocSage microservices with all endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "2.0.0"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url_auth",
+      "value": "http://localhost:8001",
+      "type": "string"
+    },
+    {
+      "key": "base_url_file",
+      "value": "http://localhost:8002",
+      "type": "string"
+    },
+    {
+      "key": "base_url_conversation",
+      "value": "http://localhost:8003",
+      "type": "string"
+    },
+    {
+      "key": "base_url_llm",
+      "value": "http://localhost:8004",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "file_hash",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "test_email",
+      "value": "test@example.com",
+      "type": "string"
+    },
+    {
+      "key": "test_password",
+      "value": "TempPassword123!",
+      "type": "string"
+    },
+    {
+      "key": "test_name",
+      "value": "Test User",
+      "type": "string"
+    },
+    {
+      "key": "confirmation_code",
+      "value": "123456",
+      "type": "string"
+    },
+    {
+      "key": "test_question",
+      "value": "What is the main topic of this document?",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "🔍 Health Checks",
+      "item": [
+        {
+          "name": "Auth Service Health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Health check response\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.health).to.eql('All Good');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url_auth}}/auth/health",
+              "host": ["{{base_url_auth}}"],
+              "path": ["auth", "health"]
+            }
+          }
+        },
+        {
+          "name": "File Service Health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Health check response\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.health).to.eql('All Good');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url_file}}/file/health",
+              "host": ["{{base_url_file}}"],
+              "path": ["file", "health"]
+            }
+          }
+        },
+        {
+          "name": "Conversation Service Health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Health check response\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.health).to.eql('All Good');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url_conversation}}/conversation/health",
+              "host": ["{{base_url_conversation}}"],
+              "path": ["conversation", "health"]
+            }
+          }
+        },
+        {
+          "name": "LLM Service Health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Health check response\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.health).to.eql('All Good');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url_llm}}/llm/health",
+              "host": ["{{base_url_llm}}"],
+              "path": ["llm", "health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔐 Authentication Service",
+      "item": [
+        {
+          "name": "1. Sign Up",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has message\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('message');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"password\": \"{{test_password}}\",\n  \"name\": \"{{test_name}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_auth}}/auth/signup",
+              "host": ["{{base_url_auth}}"],
+              "path": ["auth", "signup"]
+            }
+          }
+        },
+        {
+          "name": "2. Confirm Sign Up",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"code\": \"{{confirmation_code}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_auth}}/auth/confirm-signup",
+              "host": ["{{base_url_auth}}"],
+              "path": ["auth", "confirm-signup"]
+            }
+          }
+        },
+        {
+          "name": "3. Resend Confirmation Code",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_email}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_auth}}/auth/resend-confirmation-code",
+              "host": ["{{base_url_auth}}"],
+              "path": ["auth", "resend-confirmation-code"]
+            }
+          }
+        },
+        {
+          "name": "4. Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has access_token\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('access_token');",
+                  "    pm.collectionVariables.set('access_token', jsonData.access_token);",
+                  "    if (jsonData.refresh_token) {",
+                  "        pm.collectionVariables.set('refresh_token', jsonData.refresh_token);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"password\": \"{{test_password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_auth}}/auth/login",
+              "host": ["{{base_url_auth}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "5. Get User Info",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has user info\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('email');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url_auth}}/auth/get-user",
+              "host": ["{{base_url_auth}}"],
+              "path": ["auth", "get-user"]
+            }
+          }
+        },
+        {
+          "name": "6. Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has new access_token\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.access_token) {",
+                  "        pm.collectionVariables.set('access_token', jsonData.access_token);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_auth}}/auth/refresh-token",
+              "host": ["{{base_url_auth}}"],
+              "path": ["auth", "refresh-token"]
+            }
+          }
+        },
+        {
+          "name": "7. Change Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"old_password\": \"{{test_password}}\",\n  \"new_password\": \"NewPassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_auth}}/auth/change-password",
+              "host": ["{{base_url_auth}}"],
+              "path": ["auth", "change-password"]
+            }
+          }
+        },
+        {
+          "name": "8. Forgot Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_email}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_auth}}/auth/forgot-password",
+              "host": ["{{base_url_auth}}"],
+              "path": ["auth", "forgot-password"]
+            }
+          }
+        },
+        {
+          "name": "9. Confirm Forgot Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"code\": \"{{confirmation_code}}\",\n  \"new_password\": \"ResetPassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_auth}}/auth/confirm-forgot-password",
+              "host": ["{{base_url_auth}}"],
+              "path": ["auth", "confirm-forgot-password"]
+            }
+          }
+        },
+        {
+          "name": "10. Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url_auth}}/auth/logout",
+              "host": ["{{base_url_auth}}"],
+              "path": ["auth", "logout"]
+            }
+          }
+        },
+        {
+          "name": "11. Delete User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url_auth}}/auth/delete-user",
+              "host": ["{{base_url_auth}}"],
+              "path": ["auth", "delete-user"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📁 File Service",
+      "item": [
+        {
+          "name": "1. Upload File",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has file_hash\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('file_hash');",
+                  "    pm.collectionVariables.set('file_hash', jsonData.file_hash);",
+                  "    console.log('File hash saved:', jsonData.file_hash);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Select a file (.pdf, .docx, .doc, .pptx, .ppt, .xlsx, .xls, .txt)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url_file}}/file/upload",
+              "host": ["{{base_url_file}}"],
+              "path": ["file", "upload"]
+            }
+          }
+        },
+        {
+          "name": "2. List Uploaded Files",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response structure\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.satisfy(function(data) {",
+                  "        return data.files || data.message;",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url_file}}/file/list-uploads",
+              "host": ["{{base_url_file}}"],
+              "path": ["file", "list-uploads"]
+            }
+          }
+        },
+        {
+          "name": "3. Download File (Get Presigned URL)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has URL\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('url');",
+                  "    pm.expect(jsonData.url).to.include('amazonaws.com');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"file_hash\": \"{{file_hash}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_file}}/file/download",
+              "host": ["{{base_url_file}}"],
+              "path": ["file", "download"]
+            }
+          }
+        },
+        {
+          "name": "4. Delete Specific File",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has message\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('message');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"file_hash\": \"{{file_hash}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_file}}/file/delete-file",
+              "host": ["{{base_url_file}}"],
+              "path": ["file", "delete-file"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🤖 LLM Service",
+      "item": [
+        {
+          "name": "1. Ask Question",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has answer\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('answer');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"file_hash\": \"{{file_hash}}\",\n  \"question\": \"{{test_question}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_llm}}/llm/ask",
+              "host": ["{{base_url_llm}}"],
+              "path": ["llm", "ask"]
+            }
+          }
+        },
+        {
+          "name": "2. Adaptive Document Extraction",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has classification\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('classification');",
+                  "    pm.expect(jsonData).to.have.property('field_values');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"file_hash\": \"{{file_hash}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_llm}}/llm/extract-adaptive",
+              "host": ["{{base_url_llm}}"],
+              "path": ["llm", "extract-adaptive"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "💬 Conversation Service",
+      "item": [
+        {
+          "name": "1. Get File Conversations",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has conversations\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('conversations');",
+                  "    pm.expect(jsonData).to.have.property('message');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url_conversation}}/conversation/get-file-conversations?file_hash={{file_hash}}",
+              "host": ["{{base_url_conversation}}"],
+              "path": ["conversation", "get-file-conversations"],
+              "query": [
+                {
+                  "key": "file_hash",
+                  "value": "{{file_hash}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2. Find Specific Conversation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 or 404\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Response has conversation\", function () {",
+                  "        var jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('conversation_services');",
+                  "        pm.expect(jsonData).to.have.property('message');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"file_hash\": \"{{file_hash}}\",\n  \"question\": \"{{test_question}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_conversation}}/conversation/find-conversation",
+              "host": ["{{base_url_conversation}}"],
+              "path": ["conversation", "find-conversation"]
+            }
+          }
+        },
+        {
+          "name": "3. Delete Specific Conversation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 or 404\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Response has message\", function () {",
+                  "        var jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('message');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"file_hash\": \"{{file_hash}}\",\n  \"question\": \"{{test_question}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_conversation}}/conversation/delete-conversation",
+              "host": ["{{base_url_conversation}}"],
+              "path": ["conversation", "delete-conversation"]
+            }
+          }
+        },
+        {
+          "name": "4. Delete All Conversations for File",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 or 404\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Response has message\", function () {",
+                  "        var jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('message');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"file_hash\": \"{{file_hash}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_conversation}}/conversation/delete-all-conversations",
+              "host": ["{{base_url_conversation}}"],
+              "path": ["conversation", "delete-all-conversations"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔄 Complete Testing Workflow",
+      "item": [
+        {
+          "name": "Step 1: Health Check All Services",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url_auth}}/auth/health",
+              "host": ["{{base_url_auth}}"],
+              "path": ["auth", "health"]
+            }
+          }
+        },
+        {
+          "name": "Step 2: Sign Up New User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"password\": \"{{test_password}}\",\n  \"name\": \"{{test_name}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_auth}}/auth/signup",
+              "host": ["{{base_url_auth}}"],
+              "path": ["auth", "signup"]
+            }
+          }
+        },
+        {
+          "name": "Step 3: Login User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('access_token', jsonData.access_token);",
+                  "    if (jsonData.refresh_token) {",
+                  "        pm.collectionVariables.set('refresh_token', jsonData.refresh_token);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"password\": \"{{test_password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_auth}}/auth/login",
+              "host": ["{{base_url_auth}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Step 4: Upload Test File",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('file_hash', jsonData.file_hash);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url_file}}/file/upload",
+              "host": ["{{base_url_file}}"],
+              "path": ["file", "upload"]
+            }
+          }
+        },
+        {
+          "name": "Step 5: Ask Question About File",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"file_hash\": \"{{file_hash}}\",\n  \"question\": \"{{test_question}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_llm}}/llm/ask",
+              "host": ["{{base_url_llm}}"],
+              "path": ["llm", "ask"]
+            }
+          }
+        },
+        {
+          "name": "Step 6: Get Conversations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url_conversation}}/conversation/get-file-conversations?file_hash={{file_hash}}",
+              "host": ["{{base_url_conversation}}"],
+              "path": ["conversation", "get-file-conversations"],
+              "query": [
+                {
+                  "key": "file_hash",
+                  "value": "{{file_hash}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
