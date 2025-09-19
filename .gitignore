@@ -67,10 +67,10 @@ api-keys.json
 *.der
 
 # Service-specific environment files
-auth_services/.env*
-file_services/.env*
-conversation_services/.env*
-llm_services/.env*
+backend/auth_services/.env*
+backend/file_services/.env*
+backend/conversation_services/.env*
+backend/llm_services/.env*
 
 # Logs
 logs/
@@ -227,3 +227,5 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+.kiro

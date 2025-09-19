@@ -4,6 +4,23 @@
 
 DocSage is a modern, cloud-native document processing platform that lets you upload documents and ask intelligent questions about their content. Built with enterprise-grade security and scalability in mind.
 
+## 🏗️ Project Structure
+
+```
+DocSage/
+├── backend/                # Backend microservices
+│   ├── auth_services/      # Authentication service (Port 8001)
+│   ├── file_services/      # File processing service (Port 8002)
+│   ├── conversation_services/ # Chat history service (Port 8003)
+│   ├── llm_services/       # LLM Q&A service (Port 8004)
+│   ├── docker-compose.yml  # Docker deployment
+│   ├── start_services.sh   # Quick start script
+│   └── README.md           # Backend documentation
+├── docs/                   # API documentation
+├── tests/                  # Test files
+└── README.md              # This file
+```
+
 ## ✨ What Can DocSage Do?
 
 ### 🤖 **Smart Document Analysis**
