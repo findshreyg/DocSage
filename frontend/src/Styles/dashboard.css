@@ -1,0 +1,1376 @@
+.dashboard {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  background-color: #1e293b;
+  color: #ffffff;
+  font-family: sans-serif;
+  margin: 0;
+}
+
+.sidebar {
+  display: inline-flex;
+  background-color: #202123;
+  padding: 20px;
+  border-right: 1px solid #444;
+  overflow-y: auto;
+}
+
+.sidebar h3 {
+  margin-bottom: 10px;
+}
+
+.sidebar ul {
+  list-style: none;
+  padding: 0;
+}
+
+.sidebar li {
+  padding: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: #2d2f3b;
+  margin-bottom: 5px;
+}
+
+.main-chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  overflow: hidden;
+}
+
+.upload-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.upload-label {
+  background-color: #10a37f;
+  padding: 10px 20px;
+  border-radius: 8px;
+  color: white;
+  cursor: pointer;
+}
+
+input[type="file"] {
+  display: none;
+}
+
+.chat-box {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  margin-bottom: 10px;
+}
+
+.message {
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  border-radius: 6px;
+  max-width: 70%;
+}
+
+.message.user {
+  align-self: flex-end;
+  background-color: #4b4b5e;
+}
+
+.message.ai {
+  align-self: flex-start;
+  background-color: #3b3b4e;
+}
+
+.input-form {
+  display: flex;
+  gap: 8px;
+}
+
+.input-form input {
+  flex: 1;
+  padding: 10px;
+  border-radius: 6px;
+  border: none;
+}
+
+.input-form button {
+  padding: 10px 20px;
+  background-color: #10a37f;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.dashboard {
+  display: flex;
+  height: 100vh;
+  background-color: #1e293b;
+  color: white;
+}
+
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.new-chat-btn {
+  background-color: #0b93f6;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.conversation-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  overflow-y: auto;
+  flex-grow: 1;
+}
+
+.conversation-list li {
+  padding: 10px;
+  border-radius: 5px;
+  margin-bottom: 5px;
+  cursor: pointer;
+  background-color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conversation-list li.active {
+  background-color: #0b93f6;
+}
+
+.main-chat {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  overflow: hidden;
+}
+
+.chat-box.full-width {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  overflow: hidden;
+}
+
+.messages {
+  flex-grow: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 1rem;
+}
+
+.input-form {
+  display: flex;
+  gap: 10px;
+}
+
+.input-form input {
+  flex-grow: 1;
+  padding: 10px;
+  border-radius: 10px;
+  border: none;
+}
+
+.input-form button {
+  background-color: #00a67e;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.message {
+  display: flex;
+}
+
+.message.user {
+  justify-content: flex-end;
+}
+
+.message.ai {
+  justify-content: flex-start;
+}
+
+.bubble {
+  padding: 10px 15px;
+  border-radius: 20px;
+  max-width: 70%;
+  word-wrap: break-word;
+  display: inline-block;
+  white-space: pre-wrap;
+}
+
+.message.user .bubble {
+  background-color: #0b93f6;
+  color: #fff;
+  text-align: right;
+}
+
+.message.ai .bubble {
+  background-color: #e5e5ea;
+  color: #000;
+  text-align: left;
+}
+
+.conversation-item {
+  flex-grow: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+}
+
+.delete-btn {
+  background: none;
+  border: none;
+  color: #aaa;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.delete-btn:hover {
+  color: #f44;
+}
+
+.user-dropdown.top-right {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 3.5rem;
+  right: 0;
+  background: white;
+  border: 1px solid #ccc;
+  padding: 0.5rem;
+  z-index: 1000;
+  border-radius: 4px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+/* ..... */
+
+.chat-container {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.pdf-viewer-panel {
+  flex: 1;
+  overflow-y: auto;
+  border-right: 1px solid #444;
+  /* padding: 1rem;
+  background-color: #525365; */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.chat-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.source-button {
+  background-color: #4a4a58;
+  color: #d1d1d1;
+  border: 1px solid #666;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-left: 10px;
+  font-size: 0.8em;
+}
+
+.source-button:hover {
+  background-color: #5c5c6e;
+}
+
+/* ---- */
+mark {
+  background-color: #ffd700; /* A bright yellow for highlighting */
+  color: black;
+}
+
+.source-button {
+  background-color: #4a4a58;
+  color: #d1d1d1;
+  border: 1px solid #666;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-left: 10px;
+  font-size: 0.8em;
+}
+
+.source-button:hover {
+  background-color: #5c5c6e;
+}
+
+.ai-meta {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #5a5a68;
+  font-size: 0.9em;
+  color: #020209;
+  opacity: 0.8;
+}
+
+.ai-meta p {
+  margin: 4px 0;
+}
+
+/* Loader 1 */
+/* .pdf-content-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  text-align: left;
+} */
+
+.loader {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  transform: rotate(45deg);
+}
+
+.loader-square {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 28px;
+  height: 28px;
+  margin: 2px;
+  border-radius: 0px;
+  background: white;
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  animation: square-animation 10s ease-in-out infinite both;
+}
+
+.loader-square:nth-of-type(1) {
+  animation-delay: 0s;
+}
+
+.loader-square:nth-of-type(2) {
+  animation-delay: -1.4285714286s;
+}
+
+.loader-square:nth-of-type(3) {
+  animation-delay: -2.8571428571s;
+}
+
+.loader-square:nth-of-type(4) {
+  animation-delay: -4.2857142857s;
+}
+
+.loader-square:nth-of-type(5) {
+  animation-delay: -5.7142857143s;
+}
+
+.loader-square:nth-of-type(6) {
+  animation-delay: -7.1428571429s;
+}
+
+.loader-square:nth-of-type(7) {
+  animation-delay: -8.5714285714s;
+}
+
+@keyframes square-animation {
+  0% {
+    left: 0;
+    top: 0;
+  }
+  10.5% {
+    left: 0;
+    top: 0;
+  }
+  12.5% {
+    left: 32px;
+    top: 0;
+  }
+  23% {
+    left: 32px;
+    top: 0;
+  }
+  25% {
+    left: 64px;
+    top: 0;
+  }
+  35.5% {
+    left: 64px;
+    top: 0;
+  }
+  37.5% {
+    left: 64px;
+    top: 32px;
+  }
+  48% {
+    left: 64px;
+    top: 32px;
+  }
+  50% {
+    left: 32px;
+    top: 32px;
+  }
+  60.5% {
+    left: 32px;
+    top: 32px;
+  }
+  62.5% {
+    left: 32px;
+    top: 64px;
+  }
+  73% {
+    left: 32px;
+    top: 64px;
+  }
+  75% {
+    left: 0;
+    top: 64px;
+  }
+  85.5% {
+    left: 0;
+    top: 64px;
+  }
+  87.5% {
+    left: 0;
+    top: 32px;
+  }
+  98% {
+    left: 0;
+    top: 32px;
+  }
+  100% {
+    left: 0;
+    top: 0;
+  }
+}
+
+.loader-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* loader 2 */
+
+.loader-2 {
+  position: relative;
+  width: 240px;
+  height: 130px;
+  margin-bottom: 10px;
+  border: 1px solid #d3d3d3;
+  padding: 15px;
+  background-color: #3a3b4d;
+  overflow: hidden;
+}
+
+.loader-2:after {
+  content: "";
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  background: linear-gradient(
+    110deg,
+    rgba(227, 227, 227, 0) 0%,
+    rgba(227, 227, 227, 0) 40%,
+    rgba(227, 227, 227, 0.5) 50%,
+    rgba(227, 227, 227, 0) 60%,
+    rgba(227, 227, 227, 0) 100%
+  );
+  animation: gradient-animation_2 1.2s linear infinite;
+}
+
+.loader-2 .wrapper-2 {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.loader-2 .wrapper-2 > div {
+  background-color: #525365;
+}
+
+.loader-2 .circle-2 {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+}
+
+.loader-2 .line-1-2 {
+  position: absolute;
+  top: 11px;
+  left: 58px;
+  height: 10px;
+  width: 100px;
+}
+
+.loader-2 .line-2-2 {
+  position: absolute;
+  top: 34px;
+  left: 58px;
+  height: 10px;
+  width: 150px;
+}
+
+.loader-2 .line-3-2 {
+  position: absolute;
+  top: 57px;
+  left: 0px;
+  height: 10px;
+  width: 100%;
+}
+
+.loader-2 .line-4-2 {
+  position: absolute;
+  top: 80px;
+  left: 0px;
+  height: 10px;
+  width: 92%;
+}
+
+@keyframes gradient-animation_2 {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* the Link for the keypair values */
+.header-link {
+  margin-right: 20px;
+  color: #a9a9b3;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s;
+  align-self: center; /* Vertically align with the user name */
+}
+
+.header-link:hover {
+  color: #ffffff;
+}
+
+/* Update .conversation-item to use flexbox */
+.conversation-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  border-radius: 5px;
+  margin-bottom: 5px;
+  background-color: #333;
+  transition: background-color 0.2s;
+}
+
+.conversation-item:hover {
+  background-color: #444;
+}
+
+.conversation-item.active {
+  background-color: #0b93f6;
+}
+
+/* Make the name clickable and handle long names */
+.conversation-name {
+  flex-grow: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 10px;
+}
+
+/* Create a container for the action icons */
+.conversation-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px; /* Adds a small space between the icons */
+}
+
+/* General styling for icon buttons */
+.icon-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: #a9a9b3; /* Default icon color */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+  border-radius: 4px;
+}
+
+.icon-btn:hover {
+  color: #ffffff; /* Icon color on hover */
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Specific hover color for the delete button */
+.delete-btn:hover {
+  color: #ff5555;
+}
+
+/* This creates the main two-panel layout */
+.chat-container {
+  display: flex;
+  flex-direction: row; /* This is the default, but good to be explicit */
+  height: 100%;
+  width: 100%;
+  overflow: hidden; /* Prevent content from spilling out */
+}
+
+/* --- Panel 1: PDF Viewer --- */
+.pdf-viewer-panel {
+  flex: 1 1 50%; /* Grow and shrink, with a base of 50% width */
+  /* min-width: 300px; Prevent it from shrinking too much */
+  height: 100%;
+  width: 100%;
+  overflow-y: auto; /* Allow vertical scrolling for the PDF */
+  border-right: 1px solid #120c0c;
+  /* padding: 1rem; */
+  /* background-color: #272735; */
+}
+
+/* --- Panel 2: Chat and Key-Value Panel --- */
+.chat-panel,
+.key-value-panel {
+  flex: 1 1 50%; /* Grow and shrink, with a base of 50% width */
+  min-width: 300px;
+  display: flex; /* CRITICAL: Make this a flex container */
+  flex-direction: column; /* Stack its children (messages, form) vertically */
+  overflow-y: auto; /* Allow vertical scrolling */
+  padding: 1rem;
+}
+
+/* --- Chat Panel Specifics --- */
+.messages {
+  flex-grow: 1; /* CRITICAL: Allows this to take up all available space */
+  overflow-y: auto; /* Allow message history to scroll */
+}
+
+.input-form {
+  flex-shrink: 0; /* CRITICAL: Prevents the form from shrinking */
+  display: flex;
+  gap: 10px;
+  padding-top: 1rem; /* Add some space above the input */
+  border-top: 1px solid #444;
+}
+
+/* --- Styles for Key-Value Display --- */
+.key-value-panel {
+  padding: 1rem;
+  overflow-y: auto;
+  background-color: #293649; /* Matching sidebar color */
+  border-radius: 8px;
+}
+.kv-grid {
+  display: grid;
+  grid-template-columns: auto 1fr; /* Two columns */
+  gap: 10px 20px;
+  align-items: start;
+}
+.kv-row {
+  display: contents; /* Allows grid layout to apply to children */
+}
+.kv-key {
+  font-weight: bold;
+  color: #a9a9b3;
+  text-transform: capitalize;
+}
+.kv-value {
+  white-space: pre-wrap; /* Allows long text to wrap */
+  word-break: break-word;
+  background-color: #334155;
+  padding: 5px 10px;
+  border-radius: 4px;
+}
+
+/* This ensures the right panel takes up all available height */
+.right-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden; /* Prevent content from spilling out */
+}
+
+/* --- Chat Panel Fixes --- */
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.messages {
+  flex-grow: 1; /* CRITICAL: Allows the message list to take all available space */
+  overflow-y: auto; /* Allows message history to scroll */
+  padding: 1rem;
+}
+.input-form {
+  flex-shrink: 0; /* CRITICAL: Prevents the form from shrinking or disappearing */
+  padding: 1rem;
+}
+
+/* --- Key-Value Panel Fix --- */
+.key-value-panel {
+  overflow-y: auto; /* CRITICAL: This will enable scrolling for the key-value list */
+  flex-grow: 1;
+}
+
+.resize-handle {
+  flex: 0 0 4px;
+  background-color: #444;
+  cursor: col-resize;
+  transition: background-color 0.2s;
+}
+
+.resize-handle:hover {
+  background-color: #0b93f6;
+}
+
+/* === Main Layout Foundation === */
+/* This ensures the app takes up the full browser window height */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden; /* Prevents unwanted browser scrollbars */
+  font-family: sans-serif;
+  background-color: #1e293b;
+}
+
+.dashboard {
+  height: 100%;
+  width: 100vw;
+  display: flex;
+  color: white;
+}
+
+/* === Sidebar Panel === */
+.sidebar {
+  height: 100%; /* Fill the resizable panel */
+  background-color: #293649;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-shrink: 0; /* Prevent header from shrinking */
+}
+
+.conversation-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  overflow-y: auto; /* Allow the document list to scroll */
+  flex-grow: 1;
+}
+
+/* === Main Content Area === */
+.main-chat {
+  height: 100%;
+  /* width: 100%; */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chat-header {
+  display: flex;
+  justify-content: space-between; /* Space between nav and user */
+  align-items: center;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #444;
+  flex-shrink: 0; /* Prevent header from shrinking */
+}
+
+.main-nav {
+  display: flex;
+  gap: 1rem;
+}
+
+.nav-btn {
+  background: #2d2f3b;
+  border: 1px solid #444;
+  color: #ffffff;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.nav-btn:hover {
+  background: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+}
+
+/* This is the resizable container for the PDF and Right Panel */
+.chat-container {
+  flex-grow: 1;
+  height: 100%; /* Important for nested PanelGroup */
+  overflow: hidden;
+  min-height: 0; /* A necessary fix for nested flexbox scrolling bugs */
+}
+
+/* --- PDF Viewer Panel --- */
+/* .pdf-viewer-panel {
+  height: 100%;
+  overflow-y: auto; /* Allows the PDF itself to scroll */
+/* background-color: #334155; */
+/* }
+.pdf-content-wrapper h4 {
+
+  padding: 1rem;
+  background-color: #293649;
+  margin: 0;
+} */
+*/
+
+/* --- Right-Hand Panel (Chat or Key-Value) --- */
+.right-panel, .chat-panel, .key-value-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Chat View Fixes --- */
+.messages {
+  flex-grow: 1; /* CRITICAL: Takes up all available space */
+  overflow-y: auto; /* CRITICAL: Makes the message list scrollable */
+  padding: 1rem;
+}
+.input-form {
+  flex-shrink: 0; /* CRITICAL: Stops the input form from disappearing */
+  padding: 1rem;
+  border-top: 1px solid #444;
+}
+
+/* --- Key-Value View Fix --- */
+.key-value-panel {
+  overflow-y: auto; /* CRITICAL: Makes the key-value list scrollable */
+}
+
+/* --- Resize Handle --- */
+.resize-handle {
+  flex: 0 0 4px;
+  background-color: #444;
+  cursor: col-resize;
+  transition: background-color 0.2s;
+}
+.resize-handle:hover {
+  background-color: #0b93f6;
+}
+
+/* username */
+/* Style the user name trigger for a better look */
+.user-name-trigger {
+  padding: 8px 12px;
+  border-radius: 6px;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.user-name-trigger:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Modernize the dropdown menu */
+.dropdown-menu {
+  position: absolute;
+  top: 60px; /* Adjust spacing from the top */
+  right: 0;
+  background-color: #3a3b4d; /* Darker background */
+  border: 1px solid #555;
+  border-radius: 8px;
+  padding: 4px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  /* min-width: 100px; */
+}
+
+.dropdown-menu button:hover {
+  background-color: #0b93f6;
+  color: white;
+}
+
+/* Zoom Controls */
+.pdf-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #293649;
+  padding: 4px 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 20; /* Ensure it's above the PDF content */
+}
+
+.pdf-toolbar h4 {
+  margin: 0;
+}
+
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  /* gap: 5px; */
+}
+
+.zoom-controls button {
+  background-color: #4a4a58;
+  color: white;
+  border: 1px solid #666;
+  border-radius: 7px;
+  width: 10px;
+  height: 10px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zoom-controls span {
+  min-width: 40px;
+  text-align: center;
+  font-weight: bold;
+}
+
+/* --------- */
+/* === Definitive Layout Fix === */
+
+/* Ensure the content wrapper takes up all available space */
+.pdf-content-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+/* File type indicators and conversion status */
+.conversation-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.conversation-name:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.file-icon {
+  font-size: 1.2em;
+  flex-shrink: 0;
+}
+
+.file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.converted-indicator {
+  font-size: 0.75em;
+  background-color: #28a745;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  font-weight: bold;
+}
+
+/* PDF viewer status indicator */
+.pdf-viewer-status {
+  background-color: rgba(40, 167, 69, 0.1);
+  border: 1px solid #28a745;
+  color: #28a745;
+  padding: 5px 10px;
+  border-radius: 3px;
+  font-size: 0.85em;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.pdf-viewer-status.converted {
+  background-color: rgba(255, 193, 7, 0.1);
+  border-color: #ffc107;
+  color: #856404;
+}
+
+.pdf-viewer-status.original {
+  background-color: rgba(23, 162, 184, 0.1);
+  border-color: #17a2b8;
+  color: #0c5460;
+} /*
+ Document viewer styles for different file types */
+.document-viewer-loading,
+.document-viewer-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  background-color: #f8f9fa;
+  color: #333;
+}
+
+.loading-spinner {
+  text-align: center;
+  padding: 20px;
+}
+
+.unsupported-file-viewer {
+  height: 100%;
+  background-color: #f8f9fa;
+  color: #333;
+}
+
+.unsupported-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: calc(100% - 60px);
+  padding: 20px;
+}
+
+.file-info {
+  text-align: center;
+  max-width: 500px;
+}
+
+.file-info h3 {
+  color: #333;
+  margin: 1rem 0;
+}
+
+.file-info p {
+  color: #666;
+  margin: 0.5rem 0;
+}
+
+.file-actions {
+  margin: 20px 0;
+}
+
+.file-details {
+  background-color: #e9ecef;
+  padding: 15px;
+  border-radius: 5px;
+  margin-top: 20px;
+  text-align: left;
+}
+
+.file-details p {
+  margin: 5px 0;
+  font-size: 0.9em;
+}
+
+/* Image viewer styles */
+.image-viewer {
+  height: 100%;
+  background-color: #f8f9fa;
+}
+
+.image-content {
+  height: calc(100% - 60px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow: auto;
+}
+
+/* Error content styles */
+.error-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: calc(100% - 60px);
+  padding: 20px;
+}
+
+.error-message {
+  text-align: center;
+  max-width: 500px;
+}
+
+.error-message h3 {
+  color: #dc3545;
+  margin: 1rem 0;
+}
+
+.error-actions {
+  margin: 20px 0;
+}
+
+/* Update existing PDF toolbar for consistency */
+.pdf-toolbar {
+  background-color: #343a40;
+  color: white;
+  padding: 10px 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #495057;
+}
+
+.pdf-toolbar h4 {
+  margin: 0;
+  font-size: 1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  margin-right: 10px;
+}
+
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.zoom-controls button {
+  background-color: #495057;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.zoom-controls button:hover {
+  background-color: #6c757d;
+}
+
+.zoom-controls span {
+  font-size: 14px;
+  min-width: 50px;
+  text-align: center;
+} /* Key-V
+alue display styles - Dark theme to match dashboard */
+.key-value-panel {
+  padding: 20px;
+  height: 100%;
+  overflow-y: auto;
+  background-color: #1e293b;
+  color: #ffffff;
+}
+
+.key-value-panel h3 {
+  color: #ffffff;
+  margin-bottom: 20px;
+  border-bottom: 2px solid #007bff;
+  padding-bottom: 10px;
+}
+
+.kv-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.kv-row {
+  background-color: #2d3748;
+  border-radius: 8px;
+  padding: 15px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  border-left: 4px solid #007bff;
+}
+
+.kv-key {
+  font-weight: bold;
+  color: #e2e8f0;
+  margin-bottom: 8px;
+  text-transform: capitalize;
+  font-size: 1.1em;
+}
+
+.kv-value {
+  color: #ffffff;
+  background-color: #374151;
+  padding: 10px;
+  border-radius: 4px;
+  font-family: "Courier New", monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+} /* Adaptiv
+e Extraction Display Styles - Dark theme */
+.adaptive-extraction-display {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+}
+
+.classification-section,
+.field-values-section {
+  background-color: #2d3748;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.classification-section h4,
+.field-values-section h4 {
+  margin: 0 0 15px 0;
+  color: #ffffff;
+  border-bottom: 2px solid #007bff;
+  padding-bottom: 8px;
+}
+
+.classification-info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.classification-item {
+  padding: 8px 12px;
+  background-color: #374151;
+  border-radius: 4px;
+  border-left: 3px solid #007bff;
+  color: #ffffff;
+}
+
+.field-value {
+  background-color: #374151;
+  padding: 10px;
+  border-radius: 4px;
+  font-family: "Courier New", monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-bottom: 5px;
+  color: #ffffff;
+}
+
+.field-confidence {
+  font-size: 0.85em;
+  color: #68d391;
+  font-weight: bold;
+}
+
+.metadata-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.metadata-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.metadata-item strong {
+  min-width: 100px;
+}
+
+.metadata-item code {
+  background-color: #e9ecef;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 0.85em;
+  word-break: break-all;
+}
+
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.8em;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.status-badge.success {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.status-badge.failed {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.status-badge.processing {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.extraction-error {
+  border-left: 4px solid #dc3545;
+}
+
+.extraction-error h4 {
+  color: #dc3545;
+  border-bottom-color: #dc3545;
+}
+
+.error-message {
+  background-color: #f8d7da;
+  color: #721c24;
+  padding: 10px;
+  border-radius: 4px;
+  font-family: "Courier New", monospace;
+}
