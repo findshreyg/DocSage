@@ -2,12 +2,14 @@ import hashlib
 import boto3
 import logging
 import os
+from datetime import datetime
 from dotenv import load_dotenv
 from boto3.dynamodb.conditions import Key, Attr
 from botocore.client import Config
 from botocore.exceptions import ClientError
 from fastapi import UploadFile, HTTPException
-from utils import extract_metadata, save_metadata
+from utils import extract_metadata, save_metadata, extract_adaptive_from_document
+from schemas import AdaptiveExtractRequest
 
 load_dotenv()
 
@@ -156,42 +158,129 @@ async def handle_upload(file: UploadFile, user: dict) -> dict:
         file (UploadFile): The uploaded file object.
         user (dict): The authenticated user profile.
     Returns:
-        dict: Upload result.
+        dict: Upload result with adaptive extraction data.
     """
     try:
         logger.info(f"User: {user.get('Username')} uploading file: {file.filename}")
         content = await file.read()
         file_hash = hashlib.sha256(content).hexdigest()
+        
         # Check deduplication
         exists = metadata_table.get_item(Key={"user_id": user["Username"], "hash": file_hash})
         if exists and "Item" in exists:
             logger.info("Duplicate file detected. Skipping upload.")
             return {"message": "File already uploaded.", "s3_key": exists["Item"]["s3_key"]}
+        
         s3_key = f"{user['Username']}/{file.filename}"
         file.file.seek(0)
+        
         try:
             s3_client.put_object(Bucket=S3_BUCKET_NAME, Key=s3_key, Body=file.file)
         except Exception as e:
             logger.error(f"S3 upload failed: {e}")
             raise HTTPException(status_code=500, detail="Failed to upload file to storage.")
-        # Extract metadata with LLM, then save it
+        
+        # Extract standard metadata first
         try:
-            extracted_metadata = await extract_metadata(file.filename, s3_key)
+            base_metadata = await extract_metadata(file.filename, s3_key)
         except Exception as e:
-            logger.error(f"Metadata extraction failed: {e}")
-            raise HTTPException(status_code=500, detail="Metadata extraction failed.")
+            logger.error(f"Standard metadata extraction failed: {e}")
+            # Create basic fallback metadata
+            base_metadata = {
+                "filename": file.filename,
+                "file_size": len(content),
+                "upload_timestamp": datetime.utcnow().isoformat(),
+                "content_type": file.content_type or "application/octet-stream",
+                "extraction_method": "basic_fallback"
+            }
+        
+        # First save base metadata to DynamoDB so extract_adaptive_from_document can find the file
         try:
-            save_metadata(user["Username"], file_hash, file.filename, s3_key, extracted_metadata)
+            save_metadata(user["Username"], file_hash, file.filename, s3_key, base_metadata)
         except Exception as e:
-            logger.error(f"Error saving metadata: {e}")
-            raise HTTPException(status_code=500, detail="Failed to save metadata.")
-        logger.info(f"Upload complete for {file.filename}")
-        return {
-            "message": "Upload successful",
+            logger.error(f"Error saving base metadata: {e}")
+            raise HTTPException(status_code=500, detail="Failed to save base metadata.")
+        
+        # Now perform adaptive extraction and add it to metadata
+        adaptive_extraction_result = None
+        try:
+            # Create payload for adaptive extraction
+            extract_payload = AdaptiveExtractRequest(file_hash=file_hash)
+            
+            # Perform adaptive extraction
+            adaptive_result = await extract_adaptive_from_document(extract_payload, user)
+            
+            # Convert AdaptiveExtractResponse to serializable dict
+            adaptive_extraction_result = {
+                "classification": {
+                    "document_type": adaptive_result.classification.document_type,
+                    "description": adaptive_result.classification.description,
+                    "confidence": adaptive_result.classification.confidence
+                },
+                "field_values": {
+                    field_name: {
+                        "value": field_value.value,
+                        "confidence": field_value.confidence
+                    }
+                    for field_name, field_value in adaptive_result.field_values.items()
+                },
+                "extraction_timestamp": datetime.utcnow().isoformat(),
+                "extraction_status": "success"
+            }
+            
+        except Exception as e:
+            logger.error(f"Adaptive extraction failed: {e}")
+            # Store the failure information
+            adaptive_extraction_result = {
+                "classification": {
+                    "document_type": "unknown",
+                    "description": "Adaptive extraction failed",
+                    "confidence": 0.0
+                },
+                "field_values": {},
+                "extraction_timestamp": datetime.utcnow().isoformat(),
+                "extraction_status": "failed",
+                "error": str(e)
+            }
+        
+        # Add adaptive extraction result to the base metadata
+        enhanced_metadata = {
+            **base_metadata,
+            "adaptive_extraction": adaptive_extraction_result
+        }
+        
+        # Update metadata with the enhanced version that includes adaptive extraction
+        try:
+            save_metadata(user["Username"], file_hash, file.filename, s3_key, enhanced_metadata)
+        except Exception as e:
+            logger.error(f"Error saving enhanced metadata: {e}")
+            raise HTTPException(status_code=500, detail="Failed to save enhanced metadata.")
+        
+        logger.info(f"Upload complete for {file.filename} with adaptive extraction")
+        
+        # Prepare response with summary information
+        response = {
+            "message": "Upload successful with adaptive extraction",
             "s3_key": s3_key,
             "file_hash": file_hash,
-            "result": extracted_metadata
+            "result": enhanced_metadata
         }
+        
+        # Add adaptive extraction summary to response if successful
+        if adaptive_extraction_result and adaptive_extraction_result.get("extraction_status") == "success":
+            response.update({
+                "document_type": adaptive_extraction_result["classification"]["document_type"],
+                "classification_confidence": adaptive_extraction_result["classification"]["confidence"],
+                "extracted_fields_count": len(adaptive_extraction_result["field_values"]),
+                "adaptive_extraction_status": "success"
+            })
+        else:
+            response.update({
+                "adaptive_extraction_status": "failed"
+            })
+        
+        return response
+        
     except Exception as e:
         logger.exception(f"Unexpected error during upload: {e}")
         raise HTTPException(status_code=500, detail="Internal server error during upload.")

@@ -4,6 +4,7 @@ import json
 import hashlib
 import boto3
 from botocore.exceptions import ClientError
+from decimal import Decimal
 import os
 from dotenv import load_dotenv
 import logging
@@ -11,15 +12,18 @@ import tempfile
 import subprocess
 
 from fastapi import HTTPException
+from schemas import AdaptiveExtractRequest, AdaptiveExtractResponse, ClassificationResult, FieldValueWithConfidence
 
 logger = logging.getLogger(__name__)
 load_dotenv()
 
 MISTRAL_API_URL = os.getenv("MISTRAL_API_URL")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
-MISTRAL_LLM_MODEL=os.getenv("MISTRAL_LLM_MODEL")
+MISTRAL_LLM_MODEL = os.getenv("MISTRAL_LLM_MODEL")
 AWS_REGION = os.getenv("AWS_REGION")
 COGNITO_USER_POOL_ID = os.getenv("COGNITO_USER_POOL_ID")
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+METADATA_TABLE_NAME = os.getenv("DDB_TABLE")
 
 async def check_duplicate(bucket_name: str, file_path: str) -> bool:
     """
@@ -77,9 +81,36 @@ def upload_to_s3(user_id: str, filename: str, file_content: bytes, bucket_name: 
         logger.exception("Unexpected error during upload_to_s3: %s", e)
         raise HTTPException(status_code=500, detail="Unexpected error during file upload.")
 
+def convert_floats_to_decimal(obj):
+    """
+    Recursively convert float values to Decimal for DynamoDB compatibility.
+    
+    Args:
+        obj: The object to convert (dict, list, or primitive)
+        
+    Returns:
+        The object with floats converted to Decimals
+    """
+    if isinstance(obj, dict):
+        return {k: convert_floats_to_decimal(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_floats_to_decimal(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_floats_to_decimal(item) for item in obj)
+    elif isinstance(obj, float):
+        # Handle special float values
+        if obj != obj:  # NaN check
+            return None
+        elif obj == float('inf') or obj == float('-inf'):
+            return str(obj)
+        else:
+            return Decimal(str(obj))
+    else:
+        return obj
+
 def save_metadata(user_id: str, file_hash: str, filename: str, s3_key: str, metadata: dict):
     """
-    Save extracted file metadata to the DynamoDB table in DynamoDB JSON format.
+    Save extracted file metadata to the DynamoDB table.
 
     Args:
         user_id (str): ID of the user who uploaded the file.
@@ -92,27 +123,33 @@ def save_metadata(user_id: str, file_hash: str, filename: str, s3_key: str, meta
         HTTPException: If DynamoDB put operation fails.
     """
     try:
+        # Use high-level DynamoDB resource for easier handling
+        dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION)
+        table = dynamodb.Table(METADATA_TABLE_NAME or 'IDPMetadata')
+        
+        # Log the original metadata structure for debugging
+        logger.debug(f"Original metadata type: {type(metadata)}")
+        logger.debug(f"Original metadata keys: {list(metadata.keys()) if isinstance(metadata, dict) else 'Not a dict'}")
+        
+        # Convert floats to Decimals for DynamoDB compatibility
+        dynamodb_compatible_metadata = convert_floats_to_decimal(metadata)
+        
+        # Log after conversion
+        logger.debug("Metadata converted to DynamoDB compatible format")
+        
+        # Prepare the item for DynamoDB
         item = {
-            "user_id": {"S": user_id},
-            "hash": {"S": file_hash},
-            "filename": {"S": filename},
-            "s3_key": {"S": s3_key},
-            "metadata": {
-                "M": {
-                    "created_date": {"S": metadata.get('metadata', {}).get('created_date', 'unknown')},
-                    "pages": {"N": str(metadata.get('metadata', {}).get('pages', 0))},
-                    "title": {"S": metadata.get('metadata', {}).get('title', 'unknown')},
-                    "type": {"S": metadata.get('metadata', {}).get('type', 'unknown')},
-                    "questions": {
-                        "L": [{"S": q} for q in metadata.get('questions', [])]
-                    }
-                }
-            }
+            "user_id": user_id,
+            "hash": file_hash,
+            "filename": filename,
+            "s3_key": s3_key,
+            "metadata": dynamodb_compatible_metadata
         }
-
-        # Use low-level DynamoDB client because the item is already DynamoDB JSON
-        dynamodb_client = boto3.client('dynamodb',AWS_REGION)
-        dynamodb_client.put_item(TableName='IDPMetadata', Item=item)
+        
+        # Convert the entire item to ensure no floats remain
+        item = convert_floats_to_decimal(item)
+        
+        table.put_item(Item=item)
         logger.info("Metadata saved successfully for user %s: %s", user_id, filename)
 
     except ClientError as e:
@@ -189,7 +226,7 @@ async def extract_metadata(file_name: str, s3_key: str):
                 # Convert to PDF using LibreOffice
                 output_path = os.path.splitext(local_path)[0] + ".pdf"
                 subprocess.run([
-                    "libreoffice", "--headless", "--convert-to", "pdf",
+                    "/Applications/LibreOffice.app/Contents/MacOS/soffice", "--headless", "--convert-to", "pdf",
                     "--outdir", tmpdir,
                     local_path
                 ], check=True)
@@ -257,15 +294,14 @@ async def extract_metadata(file_name: str, s3_key: str):
 
             if resp.status_code != 200:
                 logger.error(f"LLM API error (metadata): {resp.status_code} - {resp.text}")
+                logger.error(f"Request headers: {headers}")
+                logger.error(f"Request data: {data}")
                 raise HTTPException(status_code=resp.status_code, detail=resp.text)
 
-            result_text = resp.json()["choices"][0]["message"]["content"]
-            match = re.search(r'```json\s*(\{.*?\})\s*```', result_text, re.DOTALL)
-            if not match:
-                logger.error("No valid JSON block found in LLM metadata response.")
-                raise HTTPException(status_code=500, detail="No valid JSON block found in LLM metadata response.")
-
-            parsed = json.loads(match.group(1).strip())
+            response_json = resp.json()
+            logger.info(f"API Response keys: {list(response_json.keys())}")
+            result_text = response_json["choices"][0]["message"]["content"]
+            parsed = extract_json_from_llm_response(result_text)
 
             # Type checks for parsed fields
             metadata = parsed.get("metadata", {})
@@ -288,4 +324,136 @@ async def extract_metadata(file_name: str, s3_key: str):
             }
     except Exception as e:
         logger.exception("Error in extract_metadata")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+def extract_json_from_llm_response(response_text: str) -> dict:
+    """Extract JSON from LLM response text."""
+    try:
+        # Try to parse as direct JSON first
+        return json.loads(response_text)
+    except json.JSONDecodeError:
+        # Look for JSON in code blocks
+        match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(1).strip())
+            except json.JSONDecodeError:
+                pass
+        
+        # Look for JSON without code blocks - more robust pattern
+        match = re.search(r'(\{(?:[^{}]|{[^{}]*})*\})', response_text, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(1).strip())
+            except json.JSONDecodeError:
+                pass
+        
+        # Last resort: look for any {...} block
+        match = re.search(r"\{[\s\S]*\}", response_text)
+        if match:
+            try:
+                return json.loads(match.group(0))
+            except json.JSONDecodeError:
+                pass
+        
+        raise HTTPException(status_code=500, detail=f"No valid JSON found in response: {response_text[:500]}...")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to parse JSON from LLM response: {str(e)}")
+
+async def extract_adaptive_from_document(payload: AdaptiveExtractRequest, user: dict) -> AdaptiveExtractResponse:
+    try:
+        # === Step 0: Load PDF from S3, convert if needed ===
+        dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
+        table = dynamodb.Table(METADATA_TABLE_NAME)
+        user_id = user.get("sub") or user.get("Username")
+        item = table.get_item(Key={"user_id": user_id, "hash": payload.file_hash}).get("Item")
+        if not item:
+            raise HTTPException(status_code=404, detail="File not found")
+        s3_key = item.get("s3_key")
+        converted_key = s3_key + ".converted.pdf"
+        s3 = boto3.client("s3", region_name=AWS_REGION)
+        # Check for PDF conversion
+        try:
+            s3.head_object(Bucket=S3_BUCKET_NAME, Key=converted_key)
+            s3_key = converted_key
+        except Exception:
+            pass
+        s3_url = s3.generate_presigned_url("get_object", Params={"Bucket": S3_BUCKET_NAME, "Key": s3_key}, ExpiresIn=300)
+
+        async with httpx.AsyncClient(timeout=180) as client:
+            # === Single Step: Classification + Extraction ===
+            prompt = """
+Analyze this document step-by-step:
+
+1. First, determine the document type by examining layout, headers, and content structure
+2. Then, identify the most critical fields that should be extracted for this specific document type
+3. Finally, extract those field values with high precision
+
+Think through each step carefully before providing your final answer.
+
+Return JSON in this exact format:
+{
+  "document_type": "precise label for document type (e.g., 'bank statement', 'invoice', 'medical report')",
+  "description": "brief description of document purpose and key contents", 
+  "confidence": 0.95,
+  "extracted_fields": {
+    "field_name_1": {
+      "value": "extracted value",
+      "confidence": 0.9,
+      "reasoning": "brief explanation of why this value was chosen"
+    },
+    "field_name_2": {
+      "value": "extracted value", 
+      "confidence": 0.8,
+      "reasoning": "brief explanation of why this value was chosen"
+    }
+  }
+}
+
+Be conservative with confidence scores - only use high confidence (>0.8) when you're very certain.
+Focus on extracting the most critical fields that would be valuable for this document type.
+"""
+            response = await client.post(
+                MISTRAL_API_URL,
+                headers={"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"},
+                json={
+                    "model": MISTRAL_LLM_MODEL,
+                    "messages": [{
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "document_url", "document_url": s3_url}
+                        ]
+                    }],
+                    "response_format": {"type": "json_object"}
+                }
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"Adaptive extraction API error: {response.status_code} - {response.text}")
+                raise HTTPException(status_code=500, detail=f"API error: {response.status_code}")
+            
+            response_json = response.json()
+            logger.info(f"Adaptive API Response keys: {list(response_json.keys())}")
+            result = extract_json_from_llm_response(response_json["choices"][0]["message"]["content"])
+
+        # Build simplified response
+        return AdaptiveExtractResponse(
+            classification=ClassificationResult(
+                document_type=result.get("document_type"),
+                description=result.get("description"),
+                confidence=result.get("confidence", 0.0)
+            ),
+            field_values={
+                field_name: FieldValueWithConfidence(
+                    value=field_data.get("value"),
+                    confidence=field_data.get("confidence", 0.0)
+                ) for field_name, field_data in result.get("extracted_fields", {}).items()
+            },
+            raw_extracted_text=response.json()["choices"][0]["message"]["content"]
+        )
+        
+    except Exception as e:
+        logger.exception("Adaptive extraction failed")
         raise HTTPException(status_code=500, detail=str(e))

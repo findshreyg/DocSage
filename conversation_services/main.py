@@ -2,39 +2,67 @@ import os
 import logging
 from fastapi import HTTPException, Request, FastAPI, Header, status
 from fastapi.middleware.cors import CORSMiddleware
-
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from dotenv import load_dotenv
 
 from utils import get_user_from_token
 from schemas import (
-    FindConversationRequest,
-    DeleteConversationRequest,
-    DeleteAllConversationsRequest,
-    GetAllConversationsPerUserPerFile,
+    FindConversationRequest, DeleteConversationRequest, DeleteAllConversationsRequest,
+    GetAllConversationsPerUserPerFile, ConversationResponse, ConversationFoundResponse, MessageResponse
 )
 from conversation_handler import (
-    find_conversation,
-    get_all_conversations_by_file,
-    delete_conversation,
-    delete_all_conversations,
+    find_conversation, get_all_conversations_by_file, delete_conversation, delete_all_conversations
 )
 
 load_dotenv()
 
-app = FastAPI()
+app = FastAPI(
+    title="DocSage Conversation Service",
+    description="Conversation Management API",
+    version="1.1.0"
+)
 
-# Logger setup
-logging.basicConfig(level=logging.INFO)
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For demonstration, allow all. Adjust as needed for prod!
+    allow_origins=["*"],  # Configure appropriately for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Exception handlers
+@app.exception_handler(ValidationError)
+async def validation_exception_handler(request: Request, exc: ValidationError):
+    """Handle Pydantic validation errors."""
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": True,
+            "message": "Validation error",
+            "details": exc.errors()
+        }
+    )
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handle HTTP exceptions with structured responses."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": True,
+            "message": exc.detail,
+            "status_code": exc.status_code
+        }
+    )
 
 @app.get("/conversation/health")
 def check_health() -> dict:

@@ -105,8 +105,13 @@
             "header": [],
             "url": {
               "raw": "{{base_url_auth}}/auth/health",
-              "host": ["{{base_url_auth}}"],
-              "path": ["auth", "health"]
+              "host": [
+                "{{base_url_auth}}"
+              ],
+              "path": [
+                "auth",
+                "health"
+              ]
             }
           }
         },
@@ -134,8 +139,13 @@
             "header": [],
             "url": {
               "raw": "{{base_url_file}}/file/health",
-              "host": ["{{base_url_file}}"],
-              "path": ["file", "health"]
+              "host": [
+                "{{base_url_file}}"
+              ],
+              "path": [
+                "file",
+                "health"
+              ]
             }
           }
         },
@@ -163,8 +173,13 @@
             "header": [],
             "url": {
               "raw": "{{base_url_conversation}}/conversation/health",
-              "host": ["{{base_url_conversation}}"],
-              "path": ["conversation", "health"]
+              "host": [
+                "{{base_url_conversation}}"
+              ],
+              "path": [
+                "conversation",
+                "health"
+              ]
             }
           }
         },
@@ -192,8 +207,13 @@
             "header": [],
             "url": {
               "raw": "{{base_url_llm}}/llm/health",
-              "host": ["{{base_url_llm}}"],
-              "path": ["llm", "health"]
+              "host": [
+                "{{base_url_llm}}"
+              ],
+              "path": [
+                "llm",
+                "health"
+              ]
             }
           }
         }
@@ -235,8 +255,13 @@
             },
             "url": {
               "raw": "{{base_url_auth}}/auth/signup",
-              "host": ["{{base_url_auth}}"],
-              "path": ["auth", "signup"]
+              "host": [
+                "{{base_url_auth}}"
+              ],
+              "path": [
+                "auth",
+                "signup"
+              ]
             }
           }
         },
@@ -268,8 +293,13 @@
             },
             "url": {
               "raw": "{{base_url_auth}}/auth/confirm-signup",
-              "host": ["{{base_url_auth}}"],
-              "path": ["auth", "confirm-signup"]
+              "host": [
+                "{{base_url_auth}}"
+              ],
+              "path": [
+                "auth",
+                "confirm-signup"
+              ]
             }
           }
         },
@@ -301,8 +331,13 @@
             },
             "url": {
               "raw": "{{base_url_auth}}/auth/resend-confirmation-code",
-              "host": ["{{base_url_auth}}"],
-              "path": ["auth", "resend-confirmation-code"]
+              "host": [
+                "{{base_url_auth}}"
+              ],
+              "path": [
+                "auth",
+                "resend-confirmation-code"
+              ]
             }
           }
         },
@@ -343,8 +378,13 @@
             },
             "url": {
               "raw": "{{base_url_auth}}/auth/login",
-              "host": ["{{base_url_auth}}"],
-              "path": ["auth", "login"]
+              "host": [
+                "{{base_url_auth}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
             }
           }
         },
@@ -377,8 +417,13 @@
             ],
             "url": {
               "raw": "{{base_url_auth}}/auth/get-user",
-              "host": ["{{base_url_auth}}"],
-              "path": ["auth", "get-user"]
+              "host": [
+                "{{base_url_auth}}"
+              ],
+              "path": [
+                "auth",
+                "get-user"
+              ]
             }
           }
         },
@@ -417,8 +462,13 @@
             },
             "url": {
               "raw": "{{base_url_auth}}/auth/refresh-token",
-              "host": ["{{base_url_auth}}"],
-              "path": ["auth", "refresh-token"]
+              "host": [
+                "{{base_url_auth}}"
+              ],
+              "path": [
+                "auth",
+                "refresh-token"
+              ]
             }
           }
         },
@@ -454,8 +504,13 @@
             },
             "url": {
               "raw": "{{base_url_auth}}/auth/change-password",
-              "host": ["{{base_url_auth}}"],
-              "path": ["auth", "change-password"]
+              "host": [
+                "{{base_url_auth}}"
+              ],
+              "path": [
+                "auth",
+                "change-password"
+              ]
             }
           }
         },
@@ -487,8 +542,13 @@
             },
             "url": {
               "raw": "{{base_url_auth}}/auth/forgot-password",
-              "host": ["{{base_url_auth}}"],
-              "path": ["auth", "forgot-password"]
+              "host": [
+                "{{base_url_auth}}"
+              ],
+              "path": [
+                "auth",
+                "forgot-password"
+              ]
             }
           }
         },
@@ -520,8 +580,13 @@
             },
             "url": {
               "raw": "{{base_url_auth}}/auth/confirm-forgot-password",
-              "host": ["{{base_url_auth}}"],
-              "path": ["auth", "confirm-forgot-password"]
+              "host": [
+                "{{base_url_auth}}"
+              ],
+              "path": [
+                "auth",
+                "confirm-forgot-password"
+              ]
             }
           }
         },
@@ -549,8 +614,13 @@
             ],
             "url": {
               "raw": "{{base_url_auth}}/auth/logout",
-              "host": ["{{base_url_auth}}"],
-              "path": ["auth", "logout"]
+              "host": [
+                "{{base_url_auth}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
             }
           }
         },
@@ -578,8 +648,13 @@
             ],
             "url": {
               "raw": "{{base_url_auth}}/auth/delete-user",
-              "host": ["{{base_url_auth}}"],
-              "path": ["auth", "delete-user"]
+              "host": [
+                "{{base_url_auth}}"
+              ],
+              "path": [
+                "auth",
+                "delete-user"
+              ]
             }
           }
         }
@@ -630,8 +705,13 @@
             },
             "url": {
               "raw": "{{base_url_file}}/file/upload",
-              "host": ["{{base_url_file}}"],
-              "path": ["file", "upload"]
+              "host": [
+                "{{base_url_file}}"
+              ],
+              "path": [
+                "file",
+                "upload"
+              ]
             }
           }
         },
@@ -666,8 +746,13 @@
             ],
             "url": {
               "raw": "{{base_url_file}}/file/list-uploads",
-              "host": ["{{base_url_file}}"],
-              "path": ["file", "list-uploads"]
+              "host": [
+                "{{base_url_file}}"
+              ],
+              "path": [
+                "file",
+                "list-uploads"
+              ]
             }
           }
         },
@@ -709,8 +794,13 @@
             },
             "url": {
               "raw": "{{base_url_file}}/file/download",
-              "host": ["{{base_url_file}}"],
-              "path": ["file", "download"]
+              "host": [
+                "{{base_url_file}}"
+              ],
+              "path": [
+                "file",
+                "download"
+              ]
             }
           }
         },
@@ -751,8 +841,13 @@
             },
             "url": {
               "raw": "{{base_url_file}}/file/delete-file",
-              "host": ["{{base_url_file}}"],
-              "path": ["file", "delete-file"]
+              "host": [
+                "{{base_url_file}}"
+              ],
+              "path": [
+                "file",
+                "delete-file"
+              ]
             }
           }
         }
@@ -798,8 +893,13 @@
             },
             "url": {
               "raw": "{{base_url_llm}}/llm/ask",
-              "host": ["{{base_url_llm}}"],
-              "path": ["llm", "ask"]
+              "host": [
+                "{{base_url_llm}}"
+              ],
+              "path": [
+                "llm",
+                "ask"
+              ]
             }
           }
         },
@@ -841,8 +941,13 @@
             },
             "url": {
               "raw": "{{base_url_llm}}/llm/extract-adaptive",
-              "host": ["{{base_url_llm}}"],
-              "path": ["llm", "extract-adaptive"]
+              "host": [
+                "{{base_url_llm}}"
+              ],
+              "path": [
+                "llm",
+                "extract-adaptive"
+              ]
             }
           }
         }
@@ -881,8 +986,13 @@
             ],
             "url": {
               "raw": "{{base_url_conversation}}/conversation/get-file-conversations?file_hash={{file_hash}}",
-              "host": ["{{base_url_conversation}}"],
-              "path": ["conversation", "get-file-conversations"],
+              "host": [
+                "{{base_url_conversation}}"
+              ],
+              "path": [
+                "conversation",
+                "get-file-conversations"
+              ],
               "query": [
                 {
                   "key": "file_hash",
@@ -932,8 +1042,13 @@
             },
             "url": {
               "raw": "{{base_url_conversation}}/conversation/find-conversation",
-              "host": ["{{base_url_conversation}}"],
-              "path": ["conversation", "find-conversation"]
+              "host": [
+                "{{base_url_conversation}}"
+              ],
+              "path": [
+                "conversation",
+                "find-conversation"
+              ]
             }
           }
         },
@@ -976,8 +1091,13 @@
             },
             "url": {
               "raw": "{{base_url_conversation}}/conversation/delete-conversation",
-              "host": ["{{base_url_conversation}}"],
-              "path": ["conversation", "delete-conversation"]
+              "host": [
+                "{{base_url_conversation}}"
+              ],
+              "path": [
+                "conversation",
+                "delete-conversation"
+              ]
             }
           }
         },
@@ -1020,8 +1140,13 @@
             },
             "url": {
               "raw": "{{base_url_conversation}}/conversation/delete-all-conversations",
-              "host": ["{{base_url_conversation}}"],
-              "path": ["conversation", "delete-all-conversations"]
+              "host": [
+                "{{base_url_conversation}}"
+              ],
+              "path": [
+                "conversation",
+                "delete-all-conversations"
+              ]
             }
           }
         }
@@ -1037,8 +1162,13 @@
             "header": [],
             "url": {
               "raw": "{{base_url_auth}}/auth/health",
-              "host": ["{{base_url_auth}}"],
-              "path": ["auth", "health"]
+              "host": [
+                "{{base_url_auth}}"
+              ],
+              "path": [
+                "auth",
+                "health"
+              ]
             }
           }
         },
@@ -1058,8 +1188,13 @@
             },
             "url": {
               "raw": "{{base_url_auth}}/auth/signup",
-              "host": ["{{base_url_auth}}"],
-              "path": ["auth", "signup"]
+              "host": [
+                "{{base_url_auth}}"
+              ],
+              "path": [
+                "auth",
+                "signup"
+              ]
             }
           }
         },
@@ -1095,8 +1230,13 @@
             },
             "url": {
               "raw": "{{base_url_auth}}/auth/login",
-              "host": ["{{base_url_auth}}"],
-              "path": ["auth", "login"]
+              "host": [
+                "{{base_url_auth}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
             }
           }
         },
@@ -1135,8 +1275,13 @@
             },
             "url": {
               "raw": "{{base_url_file}}/file/upload",
-              "host": ["{{base_url_file}}"],
-              "path": ["file", "upload"]
+              "host": [
+                "{{base_url_file}}"
+              ],
+              "path": [
+                "file",
+                "upload"
+              ]
             }
           }
         },
@@ -1160,8 +1305,13 @@
             },
             "url": {
               "raw": "{{base_url_llm}}/llm/ask",
-              "host": ["{{base_url_llm}}"],
-              "path": ["llm", "ask"]
+              "host": [
+                "{{base_url_llm}}"
+              ],
+              "path": [
+                "llm",
+                "ask"
+              ]
             }
           }
         },
@@ -1177,8 +1327,13 @@
             ],
             "url": {
               "raw": "{{base_url_conversation}}/conversation/get-file-conversations?file_hash={{file_hash}}",
-              "host": ["{{base_url_conversation}}"],
-              "path": ["conversation", "get-file-conversations"],
+              "host": [
+                "{{base_url_conversation}}"
+              ],
+              "path": [
+                "conversation",
+                "get-file-conversations"
+              ],
               "query": [
                 {
                   "key": "file_hash",

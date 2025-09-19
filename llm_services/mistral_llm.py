@@ -145,27 +145,15 @@ def safe_format_prompt(template: str, question: str) -> str:
     """
     return template.replace("{question}", question.replace("{", "{{").replace("}", "}}"))
 
-def extract_json_from_llm_response(text: str) -> Dict[str, Any]:
-    """
-    Extracts the JSON block from the LLM response.
-    Returns a parsed dict.
-    Raises HTTPException if block not found or not valid.
-    """
-    # Look for the first JSON object in the response
-    json_block_pattern = re.compile(r"\{[\s\S]*\}")
-    match = json_block_pattern.search(text)
-    if not match:
-        raise HTTPException(status_code=500, detail="No valid JSON block found in LLM response.")
-    try:
-        return json.loads(match.group(0))
-    except Exception:
-        raise HTTPException(status_code=500, detail="Failed to parse JSON from LLM response.")
-
 async def process_question(payload: AskRequest, user: dict) -> AskResponse:
     """
     Process a user question by orchestrating S3, DynamoDB, similarity search, and LLM call.
     """
     try:
+        # Input validation
+        if not payload.file_hash or not payload.question.strip():
+            raise HTTPException(status_code=400, detail="file_hash and question are required")
+        
         # Retrieve metadata and verify S3 presence
         dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
         table = dynamodb.Table(METADATA_TABLE_NAME)
@@ -189,8 +177,9 @@ async def process_question(payload: AskRequest, user: dict) -> AskResponse:
             try:
                 s3_client.head_object(Bucket=S3_BUCKET_NAME, Key=converted_key)
                 s3_key = converted_key
+                logger.info(f"Using converted PDF: {converted_key}")
             except Exception:
-                pass  # If not, stick with the original
+                logger.info(f"No converted PDF found, using original: {s3_key}")
 
         s3_url = s3_client.generate_presigned_url(
             'get_object', Params={'Bucket': S3_BUCKET_NAME, 'Key': s3_key}, ExpiresIn=3600
@@ -198,26 +187,44 @@ async def process_question(payload: AskRequest, user: dict) -> AskResponse:
 
         # Similarity search for previous questions
         conversation_table = dynamodb.Table(CONVERSATION_TABLE)
-        prev_items = conversation_table.query(
-            KeyConditionExpression=Key("user_id").eq(user_id) & Key("file_hash_timestamp").begins_with(payload.file_hash)
-        )
-        previous_questions = [item.get("question", "") for item in prev_items.get("Items", [])]
-        if previous_questions:
-            all_questions = previous_questions + [payload.question]
-            vectorizer = TfidfVectorizer().fit(all_questions)
-            vectors = vectorizer.transform(all_questions)
-            sims = cosine_similarity(vectors[-1], vectors[:-1])
-            if sims.size > 0 and sims.max() > 0.85:
-                idx = sims[0].argmax()
-                similar_item = prev_items["Items"][idx]
-                return AskResponse(
-                    question=similar_item.get("question", ""),
-                    answer=similar_item.get("answer", ""),
-                    confidence=float(similar_item.get("confidence", 0.0)),
-                    reasoning=similar_item.get("reasoning", ""),
-                    source=json.loads(similar_item.get("source")) if similar_item.get("source") else None,
-                    verified=similar_item.get("verified", False),
-                )
+        try:
+            prev_items = conversation_table.query(
+                KeyConditionExpression=Key("user_id").eq(user_id) & Key("file_hash_timestamp").begins_with(payload.file_hash)
+            )
+            previous_questions = [item.get("question", "") for item in prev_items.get("Items", [])]
+            
+            if previous_questions:
+                all_questions = previous_questions + [payload.question]
+                vectorizer = TfidfVectorizer().fit(all_questions)
+                vectors = vectorizer.transform(all_questions)
+                sims = cosine_similarity(vectors[-1], vectors[:-1])
+                
+                if sims.size > 0 and sims.max() > 0.75:
+                    idx = sims[0].argmax()
+                    similar_item = prev_items["Items"][idx]
+                    logger.info(f"Found similar question with confidence {sims.max():.3f}")
+                    
+                    # Parse source safely
+                    source = None
+                    if similar_item.get("source"):
+                        try:
+                            source = json.loads(similar_item.get("source"))
+                        except json.JSONDecodeError:
+                            logger.warning("Failed to parse source from similar question")
+                    
+                    return AskResponse(
+                        question=similar_item.get("question", ""),
+                        answer=similar_item.get("answer", ""),
+                        confidence=float(similar_item.get("confidence", 0.0)),
+                        reasoning=similar_item.get("reasoning", ""),
+                        source=source,
+                        verified=similar_item.get("verified", False),
+                        total_pages=similar_item.get("total_pages"),
+                        data_quality_notes=similar_item.get("data_quality_notes"),
+                        alternative_interpretations=json.loads(similar_item.get("alternative_interpretations", "null"))
+                    )
+        except Exception as e:
+            logger.warning(f"Similarity search failed, continuing with LLM call: {str(e)}")
 
         # Prepare LLM API call
         try:
@@ -236,8 +243,11 @@ async def process_question(payload: AskRequest, user: dict) -> AskResponse:
             ],
             "document_image_limit": 8,
             "document_page_limit": 1000,
+            "response_format": {"type": "json_object"}  # Force JSON response
         }
 
+        logger.info(f"Making LLM API call for question: {payload.question[:100]}...")
+        
         async with httpx.AsyncClient(timeout=180) as http_client:
             try:
                 resp = await http_client.post(
@@ -248,73 +258,134 @@ async def process_question(payload: AskRequest, user: dict) -> AskResponse:
                     },
                     json=data
                 )
+                resp.raise_for_status()  # This will raise an exception for HTTP errors
+                
+            except httpx.TimeoutException:
+                logger.error("Mistral API call timed out")
+                raise HTTPException(status_code=504, detail="LLM service timeout")
+            except httpx.HTTPStatusError as e:
+                logger.error(f"Mistral API HTTP error: {e.response.status_code} - {e.response.text}")
+                raise HTTPException(status_code=502, detail=f"LLM service error: {e.response.status_code}")
             except Exception as e:
                 logger.exception("Failed Mistral LLM API call")
                 raise HTTPException(status_code=500, detail=f"Mistral API call failed: {str(e)}")
 
-        if resp.status_code != 200:
-            raise HTTPException(status_code=resp.status_code, detail=resp.text)
+        # Parse response
+        try:
+            resp_json = resp.json()
+            result_text = resp_json.get("choices", [{}])[0].get("message", {}).get("content", "")
+            
+            if not result_text:
+                logger.error("Empty response from LLM API")
+                logger.error(f"Full response: {resp_json}")
+                raise HTTPException(status_code=500, detail="Empty response from LLM service")
+            
+            logger.info(f"LLM response length: {len(result_text)} characters")
+            parsed = extract_json_from_llm_response(result_text)
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse LLM API response as JSON: {str(e)}")
+            raise HTTPException(status_code=500, detail="Invalid JSON response from LLM service")
+        except Exception as e:
+            logger.error(f"Error processing LLM response: {str(e)}")
+            raise HTTPException(status_code=500, detail="Failed to process LLM response")
 
-        resp_json = resp.json()
-        result_text = resp_json.get("choices", [{}])[0].get("message", {}).get("content", "")
-        parsed = extract_json_from_llm_response(result_text)
-
-        # Validate required fields
+        # Validate required fields with better error messages
         required_fields = ["question", "answer", "confidence", "reasoning", "source", "verified"]
-        for field in required_fields:
-            if field not in parsed:
-                raise HTTPException(status_code=500, detail=f"LLM response missing '{field}'.")
+        missing_fields = [field for field in required_fields if field not in parsed]
+        if missing_fields:
+            logger.error(f"LLM response missing required fields: {missing_fields}")
+            logger.error(f"Available fields: {list(parsed.keys())}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"LLM response missing required fields: {', '.join(missing_fields)}"
+            )
 
-        # Type and range checks
-        if not isinstance(parsed["question"], str):
-            raise HTTPException(status_code=500, detail="LLM field 'question' must be string")
-        if not isinstance(parsed["answer"], str):
-            raise HTTPException(status_code=500, detail="LLM field 'answer' must be string")
-        if (
-            not isinstance(parsed["confidence"], (float, int))
-            or not (0.0 <= float(parsed["confidence"]) <= 1.0)
-        ):
-            raise HTTPException(status_code=500, detail="LLM field 'confidence' out of range (0.0-1.0)")
-        if not isinstance(parsed["reasoning"], str):
-            raise HTTPException(status_code=500, detail="LLM field 'reasoning' must be string")
-        if not isinstance(parsed["verified"], bool):
-            raise HTTPException(status_code=500, detail="LLM field 'verified' must be bool")
-        if parsed["source"] is not None and not isinstance(parsed["source"], dict):
-            raise HTTPException(status_code=500, detail="LLM field 'source' must be dict or null")
+        # Type and range checks with better error handling
+        try:
+            # Validate types
+            if not isinstance(parsed["question"], str):
+                raise ValueError("'question' must be string")
+            if not isinstance(parsed["answer"], str):
+                raise ValueError("'answer' must be string")
+            if not isinstance(parsed["confidence"], (float, int)):
+                raise ValueError("'confidence' must be number")
+            if not (0.0 <= float(parsed["confidence"]) <= 1.0):
+                raise ValueError("'confidence' must be between 0.0 and 1.0")
+            if not isinstance(parsed["reasoning"], str):
+                raise ValueError("'reasoning' must be string")
+            if not isinstance(parsed["verified"], bool):
+                raise ValueError("'verified' must be boolean")
+            if parsed["source"] is not None and not isinstance(parsed["source"], dict):
+                raise ValueError("'source' must be dict or null")
 
-        # Extra optional fields
-        if "data_quality_notes" in parsed and parsed["data_quality_notes"] and not isinstance(parsed["data_quality_notes"], str):
-            raise HTTPException(status_code=500, detail="LLM field 'data_quality_notes' must be string or null")
-        if "alternative_interpretations" in parsed and parsed["alternative_interpretations"] and not isinstance(parsed["alternative_interpretations"], list):
-            raise HTTPException(status_code=500, detail="LLM field 'alternative_interpretations' must be list or null")
+            # Validate optional fields
+            if "data_quality_notes" in parsed and parsed["data_quality_notes"] is not None:
+                if not isinstance(parsed["data_quality_notes"], str):
+                    raise ValueError("'data_quality_notes' must be string or null")
+            
+            if "alternative_interpretations" in parsed and parsed["alternative_interpretations"] is not None:
+                if not isinstance(parsed["alternative_interpretations"], list):
+                    raise ValueError("'alternative_interpretations' must be list or null")
+            
+            # Ensure total_pages is present and valid
+            if "total_pages" not in parsed:
+                parsed["total_pages"] = None
+            elif parsed["total_pages"] is not None and not isinstance(parsed["total_pages"], int):
+                try:
+                    parsed["total_pages"] = int(parsed["total_pages"])
+                except (ValueError, TypeError):
+                    parsed["total_pages"] = None
+
+        except ValueError as e:
+            logger.error(f"LLM response field validation error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Invalid LLM response: {str(e)}")
 
         # Save to DynamoDB conversation table
-        timestamp = datetime.datetime.now().isoformat()
-        item = {
-            "user_id": user_id,
-            "file_hash_timestamp": f"{payload.file_hash}#{timestamp}",
-            "file_hash": payload.file_hash,
-            "question": parsed["question"],
-            "answer": parsed["answer"],
-            "confidence": Decimal(str(parsed["confidence"])),
-            "reasoning": parsed["reasoning"],
-            "source": json.dumps(parsed["source"]),
-            "verified": parsed["verified"]
-        }
-        if "data_quality_notes" in parsed and parsed["data_quality_notes"]:
-            item["data_quality_notes"] = parsed["data_quality_notes"]
-        if "alternative_interpretations" in parsed and parsed["alternative_interpretations"]:
-            item["alternative_interpretations"] = json.dumps(parsed["alternative_interpretations"])
-        conversation_table.put_item(Item=item)
+        try:
+            timestamp = datetime.datetime.now().isoformat()
+            item = {
+                "user_id": user_id,
+                "file_hash_timestamp": f"{payload.file_hash}#{timestamp}",
+                "file_hash": payload.file_hash,
+                "question": parsed["question"],
+                "answer": parsed["answer"],
+                "confidence": Decimal(str(parsed["confidence"])),
+                "reasoning": parsed["reasoning"],
+                "source": json.dumps(parsed["source"]) if parsed["source"] else None,
+                "verified": parsed["verified"]
+            }
+            
+            # Add optional fields if present
+            if parsed.get("total_pages") is not None:
+                item["total_pages"] = parsed["total_pages"]
+            if parsed.get("data_quality_notes"):
+                item["data_quality_notes"] = parsed["data_quality_notes"]
+            if parsed.get("alternative_interpretations"):
+                item["alternative_interpretations"] = json.dumps(parsed["alternative_interpretations"])
+            
+            conversation_table.put_item(Item=item)
+            logger.info("Successfully saved conversation to DynamoDB")
+            
+        except Exception as e:
+            logger.error(f"Failed to save conversation to DynamoDB: {str(e)}")
+            # Don't fail the entire request if we can't save to DB
+            # The user still gets their answer
 
         # Return as Pydantic model
-        return AskResponse(**parsed)
+        try:
+            return AskResponse(**parsed)
+        except Exception as e:
+            logger.error(f"Failed to create AskResponse object: {str(e)}")
+            logger.error(f"Parsed data: {parsed}")
+            raise HTTPException(status_code=500, detail="Failed to create response object")
 
     except HTTPException:
+        # Re-raise HTTP exceptions as-is
         raise
     except Exception as e:
-        logger.error(f"Error in process_question: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"process_question failed: {str(e)}")
+        logger.error(f"Unexpected error in process_question: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error occurred")
 
 async def extract_adaptive_from_document(payload: AdaptiveExtractRequest, user: dict) -> AdaptiveExtractResponse:
     try:
@@ -337,21 +408,39 @@ async def extract_adaptive_from_document(payload: AdaptiveExtractRequest, user: 
         s3_url = s3.generate_presigned_url("get_object", Params={"Bucket": S3_BUCKET_NAME, "Key": s3_key}, ExpiresIn=300)
 
         async with httpx.AsyncClient(timeout=180) as client:
-            # === Step 1: Dynamic, natural language classification ===
-            step1_prompt = """
-You're analyzing a document. Based solely on its content and layout, respond with:
-1. document_type: a clear label describing the document's actual purpose (e.g., "bank statement", "flight itinerary", "medical prescription", etc.).
-2. description: a 1-2 sentence summary of what this document represents and what data it likely contains.
-3. confidence: float 0.0–1.0, your certainty in this classification.
+            # === Single Step: Classification + Extraction ===
+            prompt = """
+Analyze this document step-by-step:
 
-Output strictly in JSON as:
+1. First, determine the document type by examining layout, headers, and content structure
+2. Then, identify the most critical fields that should be extracted for this specific document type
+3. Finally, extract those field values with high precision
+
+Think through each step carefully before providing your final answer.
+
+Return JSON in this exact format:
 {
-  "document_type": "...",
-  "description": "...",
-  "confidence": 0.0
+  "document_type": "precise label for document type (e.g., 'bank statement', 'invoice', 'medical report')",
+  "description": "brief description of document purpose and key contents", 
+  "confidence": 0.95,
+  "extracted_fields": {
+    "field_name_1": {
+      "value": "extracted value",
+      "confidence": 0.9,
+      "reasoning": "brief explanation of why this value was chosen"
+    },
+    "field_name_2": {
+      "value": "extracted value", 
+      "confidence": 0.8,
+      "reasoning": "brief explanation of why this value was chosen"
+    }
+  }
 }
+
+Be conservative with confidence scores - only use high confidence (>0.8) when you're very certain.
+Focus on extracting the most critical fields that would be valuable for this document type.
 """
-            step1_response = await client.post(
+            response = await client.post(
                 MISTRAL_API_URL,
                 headers={"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"},
                 json={
@@ -359,103 +448,32 @@ Output strictly in JSON as:
                     "messages": [{
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": step1_prompt},
+                            {"type": "text", "text": prompt},
                             {"type": "document_url", "document_url": s3_url}
                         ]
                     }],
                     "response_format": {"type": "json_object"}
                 }
             )
-            step1_content = step1_response.json()["choices"][0]["message"]["content"]
-            classification = extract_json_from_llm_response(step1_content)
+            
+            result = extract_json_from_llm_response(response.json()["choices"][0]["message"]["content"])
 
-            # === Step 2: Context-rich field discovery with confidences ===
-            full_classification_json = json.dumps(classification, indent=2)
-            step2_prompt = f"""
-You are analyzing a document classified as:
-{full_classification_json}
-
-Based on this document_type and description, list the most important fields (with precise names) that should be extracted from such a document.
-For each field, provide:
-- field: field name
-- description: short description
-- confidence: float (how important/relevant it is for this document type, 0.0-1.0)
-
-Output in JSON as:
-{{"fields_to_extract": [{{"field": "...", "description": "...", "confidence": 0.0}}]}}
-"""
-            step2_response = await client.post(
-                MISTRAL_API_URL,
-                headers={"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"},
-                json={
-                    "model": MISTRAL_LLM_MODEL,
-                    "messages": [{
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": step2_prompt}
-                        ]
-                    }],
-                    "response_format": {"type": "json_object"}
-                }
-            )
-            fields_obj = extract_json_from_llm_response(step2_response.json()["choices"][0]["message"]["content"])
-            fields_to_extract = fields_obj.get("fields_to_extract", [])
-            field_names = [f["field"] for f in fields_to_extract]
-
-            # === Step 3: Contextual field extraction with per-field confidence ===
-            field_block_json = json.dumps(fields_to_extract, indent=2)
-            step3_prompt = f"""
-Document classification:
-{full_classification_json}
-
-Fields to extract (with relevance confidence):
-{field_block_json}
-
-Extract values for each field from the document. Return JSON as:
-{{
-  "field_name": {{"value": "...", "confidence": 0.0 }},
-  ...
-}}
-For each, confidence reflects your certainty in that field value for this particular document (0=not at all sure, 1=very sure).
-"""
-            step3_response = await client.post(
-                MISTRAL_API_URL,
-                headers={"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"},
-                json={
-                    "model": MISTRAL_LLM_MODEL,
-                    "messages": [{
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": step3_prompt},
-                            {"type": "document_url", "document_url": s3_url}
-                        ]
-                    }],
-                    "response_format": {"type": "json_object"}
-                }
-            )
-            extraction_data = extract_json_from_llm_response(step3_response.json()["choices"][0]["message"]["content"])
-
+        # Build simplified response
         return AdaptiveExtractResponse(
             classification=ClassificationResult(
-                document_type=classification.get("document_type"),
-                description=classification.get("description"),
-                confidence=classification.get("confidence", 0.0)
+                document_type=result.get("document_type"),
+                description=result.get("description"),
+                confidence=result.get("confidence", 0.0)
             ),
-            fields_to_extract=[
-                FieldDefinition(
-                    field=f.get("field"),
-                    description=f.get("description"),
-                    confidence=f.get("confidence", 0.0)
-                ) for f in fields_to_extract
-            ],
             field_values={
-                k: FieldValueWithConfidence(
-                    value=v.get("value"),
-                    confidence=v.get("confidence", 0.0)
-                ) for k, v in extraction_data.items()
+                field_name: FieldValueWithConfidence(
+                    value=field_data.get("value"),
+                    confidence=field_data.get("confidence", 0.0)
+                ) for field_name, field_data in result.get("extracted_fields", {}).items()
             },
-            raw_extracted_text=step3_response.json()["choices"][0]["message"]["content"]
+            raw_extracted_text=response.json()["choices"][0]["message"]["content"]
         )
+        
     except Exception as e:
         logger.exception("Adaptive extraction failed")
         raise HTTPException(status_code=500, detail=str(e))
