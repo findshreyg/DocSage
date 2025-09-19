@@ -24,24 +24,28 @@ DocSage/
 ## ✨ What Can DocSage Do?
 
 ### 🤖 **Smart Document Analysis**
+
 - Upload PDFs, Word docs, PowerPoints, and Excel files
 - Ask natural language questions about your documents
 - Get AI-powered answers with confidence scores and source citations
 - Extract structured data from complex documents automatically
 
 ### 🔐 **Secure & Private**
+
 - Personal user accounts with email verification
 - Your documents are private and secure in AWS cloud storage
 - Enterprise-grade authentication and data encryption
 - Complete data deletion when you delete your account
 
 ### 💬 **Conversation History**
+
 - Keep track of all your document conversations
 - Search through previous questions and answers
 - Organize conversations by document
 - Export or delete conversation history anytime
 
 ### 🚀 **Fast & Reliable**
+
 - Built on modern microservices architecture
 - Automatic scaling based on usage
 - 99.9% uptime with health monitoring
@@ -50,6 +54,7 @@ DocSage/
 ## 🚀 Quick Start
 
 ### Option 1: Docker (Recommended)
+
 ```bash
 # 1. Clone the repository
 git clone <repository-url>
@@ -67,6 +72,7 @@ curl http://localhost:8001/auth/health
 ```
 
 ### Option 2: Manual Setup
+
 ```bash
 # 1. Install Python dependencies
 pip install -r requirements.txt
@@ -87,16 +93,19 @@ cd llm_services && uvicorn main:app --port 8004 &
 Before you start, you'll need:
 
 ### Required Accounts
+
 - **AWS Account** - For secure cloud storage and user authentication
 - **Mistral AI Account** - For AI-powered document analysis
 
 ### Required Software
+
 - **Docker & Docker Compose** (recommended) OR **Python 3.8+**
 - **Git** for cloning the repository
 
 ### AWS Resources (Auto-created with setup script)
+
 - S3 bucket for document storage
-- Cognito User Pool for authentication  
+- Cognito User Pool for authentication
 - DynamoDB tables for metadata and conversations
 
 ## 🛠️ Technology Stack
@@ -117,22 +126,26 @@ Before you start, you'll need:
 ## 🎯 How It Works
 
 ### 1. **Upload Your Documents**
+
 - Drag and drop PDFs, Word docs, PowerPoints, or Excel files
 - Files are securely stored in your private AWS S3 bucket
 - Automatic document processing and metadata extraction
 
 ### 2. **Ask Questions**
+
 - Type natural language questions about your documents
 - "What is the total budget mentioned in this proposal?"
 - "Who are the key stakeholders listed in this contract?"
 - "What are the main risks identified in this report?"
 
 ### 3. **Get Intelligent Answers**
+
 - AI analyzes your document and provides detailed answers
 - Includes confidence scores and source citations
 - Shows exactly where in the document the answer was found
 
 ### 4. **Manage Conversations**
+
 - All your questions and answers are saved automatically
 - Search through conversation history
 - Organize by document or topic
@@ -140,6 +153,7 @@ Before you start, you'll need:
 ## 🔧 Configuration
 
 ### Environment Variables
+
 Create a `.env` file with your credentials:
 
 ```bash
@@ -165,6 +179,7 @@ MISTRAL_LLM_MODEL=mistral-large-latest
 ```
 
 ### Quick Setup Script
+
 ```bash
 # Interactive setup (recommended)
 ./scripts/setup_env.sh interactive
@@ -205,7 +220,7 @@ python scripts/validate_env.py --skip-aws  # Skip AWS checks
 
 Each service has its own `.env.example` file, but the main configuration includes:
 
-```env
+````env
 # AWS Configuration (Required for all services)
 AWS_ACCESS_KEY_ID=your_aws_access_key_id
 AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
@@ -226,9 +241,10 @@ curl http://localhost:8001/auth/health
 curl http://localhost:8002/file/health
 curl http://localhost:8003/conversation/health
 curl http://localhost:8004/llm/health
-```
+````
 
 ### 2. **Create Your Account**
+
 ```bash
 # Sign up for a new account
 curl -X POST "http://localhost:8001/auth/signup" \
@@ -249,6 +265,7 @@ curl -X POST "http://localhost:8001/auth/confirm-signup" \
 ```
 
 ### 3. **Login and Get Your Token**
+
 ```bash
 curl -X POST "http://localhost:8001/auth/login" \
   -H "Content-Type: application/json" \
@@ -261,6 +278,7 @@ curl -X POST "http://localhost:8001/auth/login" \
 ```
 
 ### 4. **Upload a Document**
+
 ```bash
 curl -X POST "http://localhost:8002/file/upload" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
@@ -270,6 +288,7 @@ curl -X POST "http://localhost:8002/file/upload" \
 ```
 
 ### 5. **Ask Questions About Your Document**
+
 ```bash
 curl -X POST "http://localhost:8004/llm/ask" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
@@ -281,6 +300,7 @@ curl -X POST "http://localhost:8004/llm/ask" \
 ```
 
 ### 6. **View Your Conversations**
+
 ```bash
 curl -X GET "http://localhost:8003/conversation/get-file-conversations?file_hash=YOUR_FILE_HASH" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
@@ -291,7 +311,7 @@ curl -X GET "http://localhost:8003/conversation/get-file-conversations?file_hash
 When running locally, each service is available on:
 
 - **🔐 Authentication**: `http://localhost:8001` - User accounts and login
-- **📁 File Management**: `http://localhost:8002` - Upload and manage documents  
+- **📁 File Management**: `http://localhost:8002` - Upload and manage documents
 - **💬 Conversations**: `http://localhost:8003` - Chat history and management
 - **🤖 AI Processing**: `http://localhost:8004` - Ask questions about documents
 
@@ -307,6 +327,7 @@ Interactive API documentation is available for each service:
 ## 🧪 Testing Your Setup
 
 ### Quick Health Check
+
 ```bash
 # Test all services are running
 curl http://localhost:8001/auth/health
@@ -316,42 +337,50 @@ curl http://localhost:8004/llm/health
 ```
 
 ### Full API Test
+
 ```bash
 # Run comprehensive API tests
 python scripts/test_api.py --email your@email.com --password YourPassword123!
 ```
 
 ### Using Postman
+
 1. Import `DocSage_Complete_Testing_Collection.json` into Postman
 2. Follow the requests in order: Signup → Login → Upload → Ask Questions
 3. See the [API Guide](docs/API_Guide.md) for detailed instructions
 
 # Run all tests
+
 pytest tests/
 
 # Run with coverage
+
 pytest --cov=. tests/
 
 # Run specific service tests
+
 pytest tests/auth_services/
 pytest tests/file_services/
+
 ```
 
 ### Test Structure
 
 ```
+
 tests/
-├── conftest.py                     # Shared test configuration
-├── test_main_orchestrator.py       # Gateway/orchestrator tests
-├── auth_services/                  # Authentication service tests
-│   ├── test_main.py
-│   ├── test_authentication.py
-│   ├── test_password_management.py
-│   ├── test_user_management.py
-│   └── test_utils.py
-└── file_services/                  # File service tests
-    └── test_file_service.py
-```
+├── conftest.py # Shared test configuration
+├── test_main_orchestrator.py # Gateway/orchestrator tests
+├── auth_services/ # Authentication service tests
+│ ├── test_main.py
+│ ├── test_authentication.py
+│ ├── test_password_management.py
+│ ├── test_user_management.py
+│ └── test_utils.py
+└── file_services/ # File service tests
+└── test_file_service.py
+
+````
 
 ### Test Features
 
@@ -430,19 +459,22 @@ lsof -i :8001 -i :8002 -i :8003 -i :8004
 # Check Docker containers
 docker-compose ps
 docker-compose logs
-```
+````
 
 **Authentication errors?**
+
 - Verify your AWS Cognito credentials in `.env`
 - Check that your Cognito User Pool allows the configured authentication flows
 - Ensure your AWS region is correct
 
 **File upload fails?**
+
 - Check your AWS S3 bucket permissions
 - Verify your AWS credentials have S3 access
 - Ensure the bucket exists in the correct region
 
 **AI responses not working?**
+
 - Verify your Mistral AI API key is valid
 - Check your Mistral AI account has sufficient credits
 - Ensure the model name is correct in your configuration
@@ -464,6 +496,7 @@ We welcome contributions! Here's how you can help:
 4. **Improve Documentation**: Help make our docs even better
 
 ### Development Setup
+
 ```bash
 # Fork and clone the repository
 git clone https://github.com/your-username/docsage.git
