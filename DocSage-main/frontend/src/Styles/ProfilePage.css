@@ -1,0 +1,197 @@
+/* ---------- Base reset ---------- */
+html, body {
+    display: grid;
+  /* height: 100%;        
+  margin: 0;
+  padding: 0;
+  background-color: #1e293b;
+  color: #e2e8f0;
+  overflow-y: auto;     */
+}
+
+/* Page container */
+.profile-page-container {
+  /* display: flex; */
+  /* justify-content: center; */
+  align-items: center;   
+  padding: 40px 20px;       
+  min-height: 100vh;        /* grows if content taller */
+  box-sizing: border-box;
+}
+
+/* IMPORTANT: avoid forcing page scrollbar hidden for accessibility.
+   If you really need to hide it, do so carefully; it's removed here. */
+
+/* ---------- Card ---------- */
+.profile-card {
+  align-items: center;
+  background-color: #2d3748;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  /* width: 100%; */
+  /* max-width: 600px; */
+  border-top: 4px solid #3b82f6;
+  /* margin: 0 auto;               */
+}
+
+/* Headings */
+.profile-card h2 {
+  text-align: center;
+  margin: 0 0 22px;
+  font-size: 1.8rem;
+}
+
+/* ---------- Sections ---------- */
+.profile-section {
+  margin-bottom: 26px;
+}
+.profile-section h3 {
+  margin: 0 0 14px;
+  color: #ffffff;
+  border-bottom: 1px solid #4a5568;
+  padding-bottom: 8px;
+}
+
+/* ---------- Form controls ---------- */
+.form-group {
+  margin-bottom: 15px;
+}
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.form-group input,
+.form-group textarea,
+.form-group select {
+  width: 80%;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(74,85,104,0.7);
+  background-color: rgba(15,23,42,0.6);
+  color: #e2e8f0;
+  font-size: 0.95rem;
+  outline: none;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 6px rgba(59,130,246,0.07);
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-block;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.95rem;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+}
+.btn:active { transform: translateY(1px); }
+
+.btn-primary {
+  background-color: #3b82f6;
+  color: white;
+}
+.btn-primary:hover { background-color: #2563eb; }
+
+.btn-secondary {
+  background-color: #64748b;
+  color: white;
+}
+.btn-secondary:hover { background-color: #475569; }
+
+/* give spacing when multiple btns are inline */
+.btn + .btn { margin-left: 12px; }
+
+/* ---------- Danger zone ---------- */
+/* Keep the red divider and content INSIDE the card */
+.profile-card hr,
+.profile-card .danger-zone-divider {
+  border: none;
+  border-top: 2px solid rgba(239,68,68,0.95);
+  margin: 20px 0;
+}
+
+/* If you use .danger-zone element instead of hr */
+.danger-zone {
+  margin-top: 12px;
+  padding-top: 18px;
+  border-top: 2px solid rgba(239,68,68,0.95);
+}
+.danger-zone p {
+  color: #cbd5e1;
+  font-size: 0.9rem;
+  margin-bottom: 15px;
+}
+
+/* Danger button */
+.btn-danger {
+  background-color: #ef4444;
+  color: white;
+}
+.btn-danger:hover { background-color: #dc2626; }
+
+/* ---------- Message display ---------- */
+.message-display {
+  text-align: center;
+  padding: 10px;
+  border-radius: 8px;
+  margin-top: 18px;
+  max-width: 100%;
+}
+.message-display.success { background-color: #10b981; color: white; }
+.message-display.error   { background-color: #ef4444; color: white; }
+
+/* ---------- Back to dashboard fixed button (like in screenshot) ---------- */
+/* If you'd rather keep the Back button inside the card, drop these and place the link inside .profile-card */
+.back-to-dashboard {
+  position: fixed;
+  left: 20px;
+  top: 20px;
+  z-index: 30;
+  display: inline-block;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background-color: #64748b;
+  color: #fff;
+  text-decoration: none;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+}
+.back-to-dashboard:hover { background-color: #475569; }
+
+/* ---------- Accessibility / small tweaks ---------- */
+/* Make sure long forms don't overflow the card horizontally */
+.profile-card form { width: 100%; }
+
+/* Small screens: reduce padding & width */
+@media (max-width: 640px) {
+  .profile-page-container { padding: 20px; }
+  .profile-card { padding: 22px; width: 100%; max-width: 100%; border-radius: 10px; }
+  .back-to-dashboard { left: 12px; bottom: 12px; padding: 9px 12px; }
+}
+
+/* ---------- Profile Menu ---------- */
+.profile-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  width: 100%;
+}
+
+.profile-menu .btn {
+  width: 100%; /* Make buttons full width of the card */
+  padding: 12px;
+  font-size: 1rem;
+}
+
+.form-actions {
+  margin-top: 20px;
+}

@@ -1,0 +1,80 @@
+services:
+  # Authentication Service
+  auth-service:
+    build:
+      context: ./auth_services
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8000"
+    env_file:
+      - .env
+    networks:
+      - docsage-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/auth/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # File Service
+  file-service:
+    build:
+      context: ./file_services
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    env_file:
+      - .env
+    networks:
+      - docsage-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/file/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Conversation Service
+  conversation-service:
+    build:
+      context: ./conversation_services
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8001"
+    env_file:
+      - .env
+    networks:
+      - docsage-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/conversation/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # LLM Service
+  llm-service:
+    build:
+      context: ./llm_services
+      dockerfile: Dockerfile
+    ports:
+      - "8004:8003"
+    env_file:
+      - .env
+    networks:
+      - docsage-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/llm/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  docsage-network:
+    driver: bridge
+
+volumes:
+  docsage-data:
+    driver: local
